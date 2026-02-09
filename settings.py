@@ -32,8 +32,12 @@ DEFAULTS = {
     "streaming_enabled": True,
     "streaming_interval_ms": 1200,   # How often to show preview text
 
+    # Whisper model
+    "whisper_model": "medium",       # tiny, base, small, medium, large-v2
+
     # Language
     "source_language": "english",    # "english" or "russian" — YOUR language
+    "filter_game_language": True,    # Only process game audio matching expected language
 
     # First-run
     "first_run_shown": False,

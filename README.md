@@ -47,6 +47,24 @@ This is a custom Python script for real-time bi-directional translation (Russian
     - **ASR**: `transcriber.py` uses `model_size="small"`. You can change this to `medium` or `large-v2` if you want higher accuracy (but higher latency).
     - **Translation**: `translator.py` uses `Helsinki-NLP/opus-mt-ru-en` and `en-ru`.
 
+## Building Executable
+
+To build a standalone `.exe` (no Python required to run):
+
+```powershell
+# Quick way — uses the build script:
+.\build.bat
+
+# Or manually:
+uv run pyinstaller build.spec --noconfirm
+copy settings.json dist\RealtimeTranslator\
+copy README.md dist\RealtimeTranslator\
+```
+
+The output will be in `dist\RealtimeTranslator\`. Run `RealtimeTranslator.exe` from that folder.
+
+> **Note**: The build is ~4-5 GB because it bundles PyTorch + CUDA + Whisper + translation models.
+
 ## Troubleshooting
 
 - **No Game Audio**: Ensure "Stereo Mix" is enabled in Windows Sound settings if `soundcard` fails to capture loopback, although `soundcard` usually handles WASAPI loopback natively.

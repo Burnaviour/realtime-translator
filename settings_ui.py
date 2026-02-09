@@ -146,6 +146,16 @@ class SettingsWindow:
         section("Language")
         self._vars.append(dropdown_row("My language", "source_language",
                                        ["english", "russian"]))
+        self._vars.append(checkbox_row("Only detect selected game language",
+                                       "filter_game_language"))
+
+        section("Whisper Model")
+        self._vars.append(dropdown_row("Model size", "whisper_model",
+                                       ["tiny", "base", "small", "medium", "large-v2"]))
+        tk.Label(frame, text="  tiny=fastest  base  small  medium  large-v2=best accuracy",
+                 font=("Segoe UI", 8), fg="#7b8794", bg=BG, anchor="w").grid(
+            row=row, column=0, columnspan=3, sticky="w", padx=16, pady=(0, 4))
+        row += 1
 
         section("Overlay Size")
         self._vars.append(slider_row("Width", "overlay_width", 400, 1600))

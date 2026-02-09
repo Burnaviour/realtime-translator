@@ -108,8 +108,10 @@ class TranslationApp:
         self.system_audio = SystemAudioLoopback(sample_rate=SAMPLE_RATE)
         self.mic_audio = MicAudioCapture(sample_rate=SAMPLE_RATE)
 
-        # Speech recognition (shared model — medium for better accent handling)
-        self.transcriber = Transcriber(model_size="medium")
+        # Speech recognition (model from settings)
+        whisper_model = self.overlay.cfg.get("whisper_model")
+        print(f"[Init] Whisper model: {whisper_model}")
+        self.transcriber = Transcriber(model_size=whisper_model)
 
         # Translation models (direction based on source_language setting)
         self.translator_game = Translator(source_lang=game_src, target_lang=game_tgt)
@@ -119,6 +121,10 @@ class TranslationApp:
         self.mic_lang_hint = mic_lang_hint
         self.game_label = game_label
         self.mic_label = mic_label
+
+        # Language filtering — read live from settings so the toggle
+        # takes effect without restarting
+        self._settings = self.overlay.cfg
 
         # Overlay
         # (already created above)
@@ -238,10 +244,27 @@ class TranslationApp:
             if len(buffer) > SAMPLE_RATE * 30:
                 buffer = buffer[-max_samples:]
 
+    def _is_game_source(self, label):
+        """Return True if this label belongs to the game audio pipeline."""
+        return "Game" in label
+
+    def _should_filter_language(self):
+        """Check if language filtering is enabled in settings."""
+        return self._settings.get("filter_game_language")
+
     def _preview_transcribe(self, audio, language, translator, preview_func, label):
         """Streaming preview: transcribe + translate so the user sees their language."""
         try:
-            text = self.transcriber.transcribe_text(audio, language=language)
+            # For game audio with filtering ON, use language detection
+            if self._is_game_source(label) and self._should_filter_language():
+                text, detected_lang, prob = self.transcriber.transcribe_with_lang(
+                    audio, language=language
+                )
+                if detected_lang != language:
+                    return  # silently skip — wrong language
+            else:
+                text = self.transcriber.transcribe_text(audio, language=language)
+
             if text and not is_hallucination(text):
                 translated = translator.translate(text)
                 if translated and translated.strip():
@@ -252,7 +275,18 @@ class TranslationApp:
     def _transcribe_and_translate(self, audio, language, translator, update_func, label):
         """Transcribe an audio segment and translate the result."""
         try:
-            text = self.transcriber.transcribe_text(audio, language=language)
+            # For game audio with filtering ON, detect language and skip mismatches
+            if self._is_game_source(label) and self._should_filter_language():
+                text, detected_lang, prob = self.transcriber.transcribe_with_lang(
+                    audio, language=language
+                )
+                if detected_lang != language:
+                    print(f"[{label}] Skipped — detected '{detected_lang}' "
+                          f"(prob {prob:.0%}), expected '{language}'")
+                    return
+            else:
+                text = self.transcriber.transcribe_text(audio, language=language)
+
             if not text or is_hallucination(text):
                 return
 
