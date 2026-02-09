@@ -31,6 +31,12 @@ DEFAULTS = {
     # Streaming preview
     "streaming_enabled": True,
     "streaming_interval_ms": 1200,   # How often to show preview text
+
+    # Language
+    "source_language": "english",    # "english" or "russian" — YOUR language
+
+    # First-run
+    "first_run_shown": False,
 }
 
 

@@ -42,11 +42,21 @@ class Transcriber:
         try:
             kwargs = {
                 "beam_size": 5,
+                "best_of": 3,
+                "patience": 1.5,
+                "temperature": [0.0, 0.2, 0.4, 0.6],
+                "compression_ratio_threshold": 2.4,
+                "condition_on_previous_text": True,
                 "vad_filter": True,
-                "vad_parameters": {"min_silence_duration_ms": 500},
+                "vad_parameters": {"min_silence_duration_ms": 400},
             }
             if language:
                 kwargs["language"] = language
+                # Prompt hints improve accuracy for accented speech
+                if language == "en":
+                    kwargs["initial_prompt"] = "This is a conversation in English."
+                elif language == "ru":
+                    kwargs["initial_prompt"] = "Это разговор на русском языке."
 
             segments, info = self.model.transcribe(audio_data, **kwargs)
             text = " ".join(seg.text for seg in segments).strip()

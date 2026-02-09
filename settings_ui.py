@@ -125,9 +125,27 @@ class SettingsWindow:
             row += 1
             return var, key
 
+        def dropdown_row(label, key, options):
+            nonlocal row
+            tk.Label(frame, text=label, font=FONT, fg=FG, bg=BG, anchor="w").grid(
+                row=row, column=0, sticky="w", padx=(16, 4), pady=3)
+            var = tk.StringVar(value=s.get(key))
+            menu = tk.OptionMenu(frame, var, *options)
+            menu.config(bg=ENTRY_BG, fg=FG, font=FONT, activebackground="#3d4450",
+                        activeforeground=FG, highlightthickness=0, relief="flat")
+            menu["menu"].config(bg=ENTRY_BG, fg=FG, font=FONT,
+                                activebackground=ACCENT, activeforeground="#000")
+            menu.grid(row=row, column=1, columnspan=2, sticky="ew", padx=(0, 16), pady=3)
+            row += 1
+            return var, key
+
         # ── Build all rows ──────────────────────────────────────────
 
         self._vars = []  # (var, key, [swatch]) tuples for collect()
+
+        section("Language")
+        self._vars.append(dropdown_row("My language", "source_language",
+                                       ["english", "russian"]))
 
         section("Overlay Size")
         self._vars.append(slider_row("Width", "overlay_width", 400, 1600))

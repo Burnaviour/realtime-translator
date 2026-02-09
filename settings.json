@@ -1,8 +1,8 @@
 {
-  "overlay_width": 948,
-  "overlay_height": 336,
-  "overlay_x": 474,
-  "overlay_y": 620,
+  "overlay_width": 642,
+  "overlay_height": 166,
+  "overlay_x": 780,
+  "overlay_y": 574,
   "overlay_opacity": 0.88,
   "bg_color": "#0d1117",
   "game_text_color": "#58d68d",
@@ -13,5 +13,7 @@
   "game_font_size": 14,
   "mic_font_size": 12,
   "streaming_enabled": true,
-  "streaming_interval_ms": 1200
+  "streaming_interval_ms": 1200,
+  "source_language": "english",
+  "first_run_shown": true
 }

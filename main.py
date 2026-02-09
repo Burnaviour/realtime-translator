@@ -11,22 +11,19 @@ from overlay import OverlayWindow
 SAMPLE_RATE = 16000
 
 # Common Whisper hallucinations on silence / noise (EN + RU)
+# NOTE: Only include phrases that are NEVER legitimate speech.
+#       Do NOT add common words like "ok", "yes", "bye" — they are real speech.
 HALLUCINATIONS = frozenset({
-    # English
-    "you", "thank you", "thanks", "thanks for watching",
+    # English — subtitle / broadcast artifacts only
+    "thank you for watching", "thanks for watching",
     "subtitles", "subtitles by", "subs by", "mbc",
-    "copyright", "allô", "allo", "bye", "goodbye",
-    "the end", "thank you for watching",
-    "please subscribe", "like and subscribe",
-    "so", "i'm sorry", "oh", "ah", "hmm", "huh",
-    "okay", "ok", "yes", "no", "yeah", "right",
+    "copyright", "please subscribe", "like and subscribe",
     "sync corrected", "elderman", "elder_man",
-    "www", "http", "com",
-    # Russian hallucinations
-    "субтитры", "продолжение следует", "спасибо",
+    "the end", "www", "http",
+    # Russian — subtitle / broadcast artifacts only
+    "субтитры", "продолжение следует",
     "спасибо за просмотр", "подписывайтесь",
-    "до свидания", "конец", "редактор",
-    "переводчик", "субтитры сделал",
+    "редактор", "переводчик", "субтитры сделал",
 })
 
 # Patterns that indicate repetitive hallucination (compiled once)
@@ -43,21 +40,17 @@ def is_hallucination(text: str) -> bool:
     # Strip trailing/leading punctuation for matching
     stripped = clean.strip(".!?,;:…\u2026 \t\n\"'")
 
-    if len(stripped) < 3:
+    # Only reject truly empty output
+    if len(stripped) == 0:
         return True
 
-    # Direct match
+    # Direct exact match against known artifacts
     if stripped in HALLUCINATIONS:
         return True
 
-    # Any hallucination keyword appears as a substring
-    for h in HALLUCINATIONS:
-        if h in stripped:
-            return True
-
     # Repetition detection: "word word word word" or "фраза фраза фраза"
     words = stripped.split()
-    if len(words) >= 3:
+    if len(words) >= 4:
         unique = set(words)
         # If 80%+ of words are the same word repeated, it's hallucination
         if len(unique) <= max(1, len(words) * 0.2):
@@ -65,10 +58,6 @@ def is_hallucination(text: str) -> bool:
 
     # Regex-based repetition (catches "субтитры субтитры субтитры")
     if _REPEAT_PATTERN.match(stripped):
-        return True
-
-    # Very short after cleaning common filler
-    if len(stripped.replace(" ", "")) < 4:
         return True
 
     return False
@@ -81,14 +70,35 @@ class TranslationApp:
     Pipeline per audio source:
         Audio capture -> Buffer with VAD -> Whisper transcription -> MarianMT translation -> Overlay
     
-    Game audio (system loopback): Russian -> English
-    Microphone audio:             English -> Russian
+    Language direction is configurable via source_language setting:
+        source_language = "english": Game(RU→EN), Mic(EN→RU)
+        source_language = "russian": Game(EN→RU), Mic(RU→EN)
     """
 
     def __init__(self):
+        # Overlay first (reads settings)
+        self.overlay = OverlayWindow()
+        src = self.overlay.cfg.get("source_language")  # "english" or "russian"
+
+        if src == "russian":
+            game_src, game_tgt = "en", "ru"
+            mic_src, mic_tgt = "ru", "en"
+            game_label = "Game EN->RU"
+            mic_label = "Mic RU->EN"
+            game_lang_hint = "en"
+            mic_lang_hint = "ru"
+        else:
+            game_src, game_tgt = "ru", "en"
+            mic_src, mic_tgt = "en", "ru"
+            game_label = "Game RU->EN"
+            mic_label = "Mic EN->RU"
+            game_lang_hint = "ru"
+            mic_lang_hint = "en"
+
         print("=" * 60)
         print("  Real-time Voice Translator")
-        print("  Game (Russian -> English)  |  Mic (English -> Russian)")
+        print(f"  My language: {src.upper()}")
+        print(f"  {game_label}  |  {mic_label}")
         print("=" * 60)
         print()
         print("[Init] Loading AI models (first run downloads ~1-2 GB)...")
@@ -98,15 +108,20 @@ class TranslationApp:
         self.system_audio = SystemAudioLoopback(sample_rate=SAMPLE_RATE)
         self.mic_audio = MicAudioCapture(sample_rate=SAMPLE_RATE)
 
-        # Speech recognition (shared model)
-        self.transcriber = Transcriber(model_size="small")
+        # Speech recognition (shared model — medium for better accent handling)
+        self.transcriber = Transcriber(model_size="medium")
 
-        # Translation models
-        self.translator_ru_en = Translator(source_lang="ru", target_lang="en")
-        self.translator_en_ru = Translator(source_lang="en", target_lang="ru")
+        # Translation models (direction based on source_language setting)
+        self.translator_game = Translator(source_lang=game_src, target_lang=game_tgt)
+        self.translator_mic = Translator(source_lang=mic_src, target_lang=mic_tgt)
+
+        self.game_lang_hint = game_lang_hint
+        self.mic_lang_hint = mic_lang_hint
+        self.game_label = game_label
+        self.mic_label = mic_label
 
         # Overlay
-        self.overlay = OverlayWindow()
+        # (already created above)
 
         self.running = True
 
@@ -144,7 +159,7 @@ class TranslationApp:
         detected, do the full transcription + translation as the "final" result.
         """
         buffer = np.array([], dtype=np.float32)
-        min_samples = int(SAMPLE_RATE * 2)
+        min_samples = int(SAMPLE_RATE * 0.8)   # 0.8s — allow short phrases like "ok"
         max_samples = int(SAMPLE_RATE * 20)
         silence_threshold = 0.005
         consecutive_silent = 0
@@ -258,20 +273,20 @@ class TranslationApp:
         game_thread = threading.Thread(
             target=self._audio_processor,
             args=(
-                self.system_audio, "ru", self.translator_ru_en,
+                self.system_audio, self.game_lang_hint, self.translator_game,
                 self.overlay.update_game_text,
                 self.overlay.update_game_preview,
-                "Game RU\u2192EN",
+                self.game_label,
             ),
             daemon=True,
         )
         mic_thread = threading.Thread(
             target=self._audio_processor,
             args=(
-                self.mic_audio, "en", self.translator_en_ru,
+                self.mic_audio, self.mic_lang_hint, self.translator_mic,
                 self.overlay.update_mic_text,
                 self.overlay.update_mic_preview,
-                "Mic EN\u2192RU",
+                self.mic_label,
             ),
             daemon=True,
         )
@@ -291,6 +306,9 @@ class TranslationApp:
             self._shutdown()
 
         signal.signal(signal.SIGINT, _signal_handler)
+
+        # Wire close button on overlay to clean shutdown
+        self.overlay.set_on_close(self._shutdown)
 
         # Periodic check keeps the signal handler responsive
         def _keepalive():
@@ -324,8 +342,20 @@ class TranslationApp:
         except Exception:
             pass
         print("[Shutdown] Done.")
+        # Force-exit to avoid Fortran / native-library cleanup errors
+        import os
+        os._exit(0)
 
 
 if __name__ == "__main__":
-    app = TranslationApp()
-    app.run()
+    try:
+        app = TranslationApp()
+        app.run()
+    except Exception as e:
+        import traceback
+        print("\n" + "=" * 60)
+        print("  FATAL ERROR — the program crashed")
+        print("=" * 60)
+        traceback.print_exc()
+        print("\n" + "=" * 60)
+        input("Press Enter to close this window...")

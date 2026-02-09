@@ -35,6 +35,7 @@ class OverlayWindow:
         self._drag_y = 0
         self._resizing = False
         self._resize_edge = None
+        self._on_close_callback = None   # set by main app for clean exit
 
         # Settings window (lazy)
         self._settings_win = SettingsWindow(self.cfg, on_apply_callback=self._apply_settings)
@@ -46,6 +47,82 @@ class OverlayWindow:
         self.root.deiconify()
         self.root.after(80, self._process_queue)
         self.root.after(2000, self._keep_on_top)  # Periodic topmost re-assert
+
+        # Welcome popup every launch
+        self.root.after(300, self._show_welcome)
+
+    # ════════════════════════════════════════════════════════════════
+    #  WELCOME POPUP (first run)
+    # ════════════════════════════════════════════════════════════════
+
+    def _show_welcome(self):
+        """Show a one-time welcome / quick-start popup."""
+        popup = tk.Toplevel(self.root)
+        popup.title("Welcome — Real-time Translator")
+        popup.geometry("520x370")
+        popup.resizable(False, False)
+        popup.configure(bg="#1c2128")
+        popup.attributes("-topmost", True)
+
+        # Temporarily remove click-through so user can interact
+        was_locked = self.locked
+        if was_locked:
+            self.locked = False
+            self._remove_click_through()
+
+        BG = "#1c2128"
+        FG = "#c9d1d9"
+        ACCENT = "#58a6ff"
+        FONT = ("Segoe UI", 10)
+
+        # Title
+        tk.Label(popup, text=" to Real-time Voice Translator!",
+                 font=("Segoe UI", 14, "bold"), fg=ACCENT, bg=BG).pack(pady=(18, 6))
+
+        # Body
+        src = self.cfg.get("source_language")
+        if src == "russian":
+            direction_text = (
+                "Created for VIKA\n"
+                "Your language: RUSSIAN\n"
+                "Game / friend audio: English → translated to Russian for you\n"
+                "Your microphone: Russian → translated to English for them"
+            )
+        else:
+            direction_text = (
+                "Created for VIKA .\n"
+                "Your language: ENGLISH\n"
+                "Game / friend audio: Russian → translated to English for you\n"
+                "Your microphone: English → translated to Russian for them"
+            )
+
+        info = (
+            f"{direction_text}\n\n"
+            "Hotkeys:\n"
+            "  F8  — Lock / Unlock overlay (click-through toggle)\n"
+            "  F9  — Show / Hide overlay\n"
+            "  F10 — Open Settings panel\n\n"
+            "You can change your language in Settings (F10).\n"
+            "Note: Changing language requires a restart to reload models."
+        )
+
+        tk.Label(popup, text=info, font=FONT, fg=FG, bg=BG,
+                 justify="left", anchor="nw", wraplength=480).pack(
+            padx=20, pady=(6, 10), fill="both", expand=True)
+
+        def _close():
+            popup.destroy()
+            # Restore lock state
+            if was_locked:
+                self.locked = True
+                self._apply_click_through()
+
+        tk.Button(popup, text="Got it!", font=("Segoe UI", 11, "bold"),
+                  bg="#238636", fg="#fff", activebackground="#2ea043",
+                  relief="flat", padx=24, pady=6,
+                  command=_close).pack(pady=(0, 16))
+
+        popup.protocol("WM_DELETE_WINDOW", _close)
 
     # ════════════════════════════════════════════════════════════════
     #  BUILD
@@ -133,6 +210,14 @@ class OverlayWindow:
         )
         self.label_status.pack(side="left", fill="x", expand=True)
 
+        # ✕ close button (always visible, even when locked)
+        self.btn_close = tk.Label(
+            status_row, text="\u2715", font=(font, 12, "bold"),
+            fg=c.get("status_color"), bg=bg, cursor="hand2",
+        )
+        self.btn_close.pack(side="right", padx=(8, 0))
+        self.btn_close.bind("<Button-1>", lambda e: self._request_close())
+
         # ⚙ gear button (always visible, even when locked)
         self.btn_settings = tk.Label(
             status_row, text="\u2699", font=(font, 13),
@@ -193,15 +278,27 @@ class OverlayWindow:
         self._sep.config(bg=ac)
         self.label_status.config(fg=sc_, bg=bg)
         self.btn_settings.config(fg=sc_, bg=bg)
+        self.btn_close.config(fg=sc_, bg=bg)
 
     # ════════════════════════════════════════════════════════════════
     #  DRAG & RESIZE
     # ════════════════════════════════════════════════════════════════
 
+    def set_on_close(self, callback):
+        """Register a callback invoked when the user clicks the ✕ button."""
+        self._on_close_callback = callback
+
+    def _request_close(self):
+        """Handle the ✕ close button click."""
+        if self._on_close_callback:
+            self._on_close_callback()
+        else:
+            self.stop()
+
     def _bind_drag_recursive(self, widget):
         """Bind drag/resize events to a widget and all its descendants."""
-        # Skip the gear button — it has its own click handler
-        if widget is self.btn_settings:
+        # Skip the gear / close buttons — they have their own click handlers
+        if widget is self.btn_settings or widget is self.btn_close:
             return
         widget.bind("<Button-1>", self._on_press)
         widget.bind("<B1-Motion>", self._on_motion)
