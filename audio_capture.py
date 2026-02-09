@@ -2,6 +2,11 @@ import soundcard as sc
 import numpy as np
 import threading
 import queue
+import warnings
+
+# Suppress harmless "data discontinuity" warnings from soundcard
+# (occurs when CPU is briefly busy with AI models — doesn't affect audio quality)
+warnings.filterwarnings("ignore", message=".*data discontinuity.*")
 
 
 class AudioCapture:

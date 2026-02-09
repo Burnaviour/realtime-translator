@@ -188,7 +188,8 @@ class TranslationApp:
                     last_preview_time = now
                     threading.Thread(
                         target=self._preview_transcribe,
-                        args=(buffer.copy(), language, preview_func, label),
+                        args=(buffer.copy(), language, translator,
+                              preview_func, label),
                         daemon=True,
                     ).start()
 
@@ -222,12 +223,14 @@ class TranslationApp:
             if len(buffer) > SAMPLE_RATE * 30:
                 buffer = buffer[-max_samples:]
 
-    def _preview_transcribe(self, audio, language, preview_func, label):
-        """Quick transcription for streaming preview (no translation, just raw text)."""
+    def _preview_transcribe(self, audio, language, translator, preview_func, label):
+        """Streaming preview: transcribe + translate so the user sees their language."""
         try:
             text = self.transcriber.transcribe_text(audio, language=language)
             if text and not is_hallucination(text):
-                preview_func(text)
+                translated = translator.translate(text)
+                if translated and translated.strip():
+                    preview_func(translated)
         except Exception:
             pass
 
@@ -279,20 +282,47 @@ class TranslationApp:
         print("[Running] Listening... Speak or play game audio.")
         print()
 
+        # Ctrl+C handler — tkinter on Windows doesn't propagate KeyboardInterrupt
+        # so we poll for it via a periodic callback
+        import signal
+
+        def _signal_handler(sig, frame):
+            print("\n[Ctrl+C] Shutting down...")
+            self._shutdown()
+
+        signal.signal(signal.SIGINT, _signal_handler)
+
+        # Periodic check keeps the signal handler responsive
+        def _keepalive():
+            if self.running:
+                self.overlay.root.after(500, _keepalive)
+        self.overlay.root.after(500, _keepalive)
+
         # Overlay runs on the main thread (tkinter requirement)
         try:
             self.overlay.start()
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, SystemExit):
             pass
         finally:
             self._shutdown()
 
     def _shutdown(self):
-        print("\n[Shutdown] Stopping...")
+        if not self.running:
+            return  # Already shut down
         self.running = False
-        self.system_audio.stop()
-        self.mic_audio.stop()
-        self.overlay.stop()
+        print("\n[Shutdown] Stopping...")
+        try:
+            self.system_audio.stop()
+        except Exception:
+            pass
+        try:
+            self.mic_audio.stop()
+        except Exception:
+            pass
+        try:
+            self.overlay.stop()
+        except Exception:
+            pass
         print("[Shutdown] Done.")
 
 

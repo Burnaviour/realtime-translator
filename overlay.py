@@ -45,6 +45,7 @@ class OverlayWindow:
 
         self.root.deiconify()
         self.root.after(80, self._process_queue)
+        self.root.after(2000, self._keep_on_top)  # Periodic topmost re-assert
 
     # ════════════════════════════════════════════════════════════════
     #  BUILD
@@ -141,17 +142,8 @@ class OverlayWindow:
         self.btn_settings.bind("<Button-1>", lambda e: self._open_settings())
 
         # ── Drag & resize bindings ──────────────────────────────────
-        self.root.bind("<Button-1>", self._on_press)
-        self.root.bind("<B1-Motion>", self._on_motion)
-        self.root.bind("<ButtonRelease-1>", self._on_release)
-        self.root.bind("<Motion>", self._on_hover)
-
-        # Propagate bindings to children (except gear button)
-        for w in (self.container, self.label_game, self.label_mic,
-                  self._game_icon, self._mic_icon, self.label_status):
-            w.bind("<Button-1>", self._on_press)
-            w.bind("<B1-Motion>", self._on_motion)
-            w.bind("<ButtonRelease-1>", self._on_release)
+        # Bind to every widget in the overlay so the entire area is draggable
+        self._bind_drag_recursive(self.root)
 
     # ════════════════════════════════════════════════════════════════
     #  APPLY SETTINGS (live update)
@@ -206,18 +198,38 @@ class OverlayWindow:
     #  DRAG & RESIZE
     # ════════════════════════════════════════════════════════════════
 
-    def _edge_at(self, x, y):
-        """Return which edge/corner the cursor is near, or None."""
+    def _bind_drag_recursive(self, widget):
+        """Bind drag/resize events to a widget and all its descendants."""
+        # Skip the gear button — it has its own click handler
+        if widget is self.btn_settings:
+            return
+        widget.bind("<Button-1>", self._on_press)
+        widget.bind("<B1-Motion>", self._on_motion)
+        widget.bind("<ButtonRelease-1>", self._on_release)
+        widget.bind("<Motion>", self._on_hover)
+        for child in widget.winfo_children():
+            self._bind_drag_recursive(child)
+
+    def _edge_at(self, x_root, y_root):
+        """Return which edge/corner the cursor is near, or None.
+        Uses screen (root) coordinates for consistency across child widgets."""
+        rx = self.root.winfo_rootx()
+        ry = self.root.winfo_rooty()
         w = self.root.winfo_width()
         h = self.root.winfo_height()
+
+        # Local position relative to the overlay window
+        lx = x_root - rx
+        ly = y_root - ry
+
         edge = ""
-        if y <= _GRIP:
+        if ly <= _GRIP:
             edge += "n"
-        elif y >= h - _GRIP:
+        elif ly >= h - _GRIP:
             edge += "s"
-        if x <= _GRIP:
+        if lx <= _GRIP:
             edge += "w"
-        elif x >= w - _GRIP:
+        elif lx >= w - _GRIP:
             edge += "e"
         return edge or None
 
@@ -225,7 +237,7 @@ class OverlayWindow:
         if self.locked:
             self.root.config(cursor="")
             return
-        edge = self._edge_at(event.x, event.y)
+        edge = self._edge_at(event.x_root, event.y_root)
         cursors = {
             "n": "top_side", "s": "bottom_side",
             "w": "left_side", "e": "right_side",
@@ -237,7 +249,7 @@ class OverlayWindow:
     def _on_press(self, event):
         if self.locked:
             return
-        edge = self._edge_at(event.x, event.y)
+        edge = self._edge_at(event.x_root, event.y_root)
         if edge:
             self._resizing = True
             self._resize_edge = edge
@@ -245,7 +257,12 @@ class OverlayWindow:
             self._resizing = False
         self._drag_x = event.x_root
         self._drag_y = event.y_root
-        self._orig_geo = self.root.winfo_geometry()  # WxH+X+Y
+        # Capture current geometry as the baseline for both drag and resize
+        geo = self.root.winfo_geometry()  # "WxH+X+Y"
+        dims, pos = geo.split("+", 1)
+        parts = pos.split("+")
+        self._orig_w, self._orig_h = [int(v) for v in dims.split("x")]
+        self._orig_x, self._orig_y = int(parts[0]), int(parts[1])
 
     def _on_motion(self, event):
         if self.locked:
@@ -254,26 +271,19 @@ class OverlayWindow:
         dy = event.y_root - self._drag_y
 
         if self._resizing:
-            # Parse current geometry
-            geo = self._orig_geo
-            dims, pos = geo.split("+", 1) if "+" in geo else (geo, "0+0")
-            ow, oh = [int(v) for v in dims.split("x")]
-            parts = pos.split("+")
-            ox, oy = int(parts[0]), int(parts[1])
-
-            nw, nh, nx, ny = ow, oh, ox, oy
+            nw, nh, nx, ny = self._orig_w, self._orig_h, self._orig_x, self._orig_y
             edge = self._resize_edge
 
             if "e" in edge:
-                nw = max(300, ow + dx)
+                nw = max(300, self._orig_w + dx)
             if "w" in edge:
-                nw = max(300, ow - dx)
-                nx = ox + dx
+                nw = max(300, self._orig_w - dx)
+                nx = self._orig_x + dx
             if "s" in edge:
-                nh = max(80, oh + dy)
+                nh = max(80, self._orig_h + dy)
             if "n" in edge:
-                nh = max(80, oh - dy)
-                ny = oy + dy
+                nh = max(80, self._orig_h - dy)
+                ny = self._orig_y + dy
 
             self.root.geometry(f"{nw}x{nh}+{nx}+{ny}")
             self.cfg.set("overlay_width", nw)
@@ -284,12 +294,10 @@ class OverlayWindow:
             self.label_game.config(wraplength=wrap)
             self.label_mic.config(wraplength=wrap)
         else:
-            # Drag / move
-            x = self.root.winfo_x() + dx
-            y = self.root.winfo_y() + dy
-            self.root.geometry(f"+{x}+{y}")
-            self._drag_x = event.x_root
-            self._drag_y = event.y_root
+            # Drag / move — use stored origin for reliability
+            nx = self._orig_x + dx
+            ny = self._orig_y + dy
+            self.root.geometry(f"+{nx}+{ny}")
 
     def _on_release(self, event):
         self._resizing = False
@@ -456,6 +464,16 @@ class OverlayWindow:
     def start(self):
         self.root.mainloop()
 
+    def _keep_on_top(self):
+        """Re-assert topmost every 3s so the overlay stays above borderless games."""
+        try:
+            if self.root.winfo_exists():
+                self.root.attributes("-topmost", False)
+                self.root.attributes("-topmost", True)
+                self.root.after(3000, self._keep_on_top)
+        except Exception:
+            pass
+
     def stop(self):
         # Save position on exit
         try:
@@ -468,5 +486,6 @@ class OverlayWindow:
             pass
         try:
             self.root.quit()
+            self.root.destroy()
         except Exception:
             pass
