@@ -17,6 +17,7 @@ import queue
 
 from settings import Settings
 from settings_ui import SettingsWindow
+from locales import t, set_language
 
 # Resize handle size in pixels
 _GRIP = 8
@@ -25,6 +26,11 @@ _GRIP = 8
 class OverlayWindow:
     def __init__(self):
         self.cfg = Settings()
+
+        # Set UI language from config
+        app_lang = self.cfg.get("app_language")
+        set_language("ru" if app_lang == "russian" else "en")
+
         self.root = tk.Tk()
         self.root.withdraw()
 
@@ -58,7 +64,7 @@ class OverlayWindow:
     def _show_welcome(self):
         """Show a one-time welcome / quick-start popup."""
         popup = tk.Toplevel(self.root)
-        popup.title("Welcome — Real-time Translator")
+        popup.title(t("welcome_title"))
         popup.geometry("520x370")
         popup.resizable(False, False)
         popup.configure(bg="#1c2128")
@@ -76,34 +82,33 @@ class OverlayWindow:
         FONT = ("Segoe UI", 10)
 
         # Title
-        tk.Label(popup, text=" to Real-time Voice Translator!",
+        tk.Label(popup, text=t("welcome_title"),
                  font=("Segoe UI", 14, "bold"), fg=ACCENT, bg=BG).pack(pady=(18, 6))
 
         # Body
         src = self.cfg.get("source_language")
         if src == "russian":
             direction_text = (
-                "Created for VIKA\n"
-                "Your language: RUSSIAN\n"
-                "Game / friend audio: English → translated to Russian for you\n"
-                "Your microphone: Russian → translated to English for them"
+                f"{t('welcome_created_for')}\n"
+                f"{t('welcome_your_lang_ru')}\n"
+                f"{t('welcome_game_ru')}\n"
+                f"{t('welcome_mic_ru')}"
             )
         else:
             direction_text = (
-                "Created for VIKA .\n"
-                "Your language: ENGLISH\n"
-                "Game / friend audio: Russian → translated to English for you\n"
-                "Your microphone: English → translated to Russian for them"
+                f"{t('welcome_created_for')}\n"
+                f"{t('welcome_your_lang')}\n"
+                f"{t('welcome_game_en')}\n"
+                f"{t('welcome_mic_en')}"
             )
 
         info = (
             f"{direction_text}\n\n"
-            "Hotkeys:\n"
-            "  F8  — Lock / Unlock overlay (click-through toggle)\n"
-            "  F9  — Show / Hide overlay\n"
-            "  F10 — Open Settings panel\n\n"
-            "You can change your language in Settings (F10).\n"
-            "Note: Changing language requires a restart to reload models."
+            f"{t('welcome_hotkeys_label')}\n"
+            f"  {t('welcome_f8')}\n"
+            f"  {t('welcome_f9')}\n"
+            f"  {t('welcome_f10')}\n\n"
+            f"{t('welcome_change_lang')}"
         )
 
         tk.Label(popup, text=info, font=FONT, fg=FG, bg=BG,
@@ -117,7 +122,7 @@ class OverlayWindow:
                 self.locked = True
                 self._apply_click_through()
 
-        tk.Button(popup, text="Got it!", font=("Segoe UI", 11, "bold"),
+        tk.Button(popup, text=t("welcome_got_it"), font=("Segoe UI", 11, "bold"),
                   bg="#238636", fg="#fff", activebackground="#2ea043",
                   relief="flat", padx=24, pady=6,
                   command=_close).pack(pady=(0, 16))
@@ -170,7 +175,7 @@ class OverlayWindow:
         self._game_icon.pack(side="left", padx=(0, 6))
 
         self.label_game = tk.Label(
-            game_row, text="Listening for game audio\u2026",
+            game_row, text=t("listening_game"),
             font=(font, c.get("game_font_size"), "bold"),
             fg=c.get("game_text_color"), bg=bg,
             anchor="w", wraplength=wrap, justify="left",
@@ -192,7 +197,7 @@ class OverlayWindow:
         self._mic_icon.pack(side="left", padx=(0, 6))
 
         self.label_mic = tk.Label(
-            mic_row, text="Listening for mic input\u2026",
+            mic_row, text=t("listening_mic"),
             font=(font, c.get("mic_font_size")),
             fg=c.get("mic_text_color"), bg=bg,
             anchor="w", wraplength=wrap, justify="left",
@@ -205,7 +210,7 @@ class OverlayWindow:
 
         self.label_status = tk.Label(
             status_row,
-            text="LOCKED \u2022 F8 Lock \u2022 F9 Hide \u2022 F10 Settings",
+            text=t("status_locked"),
             font=(font, 8), fg=c.get("status_color"), bg=bg, anchor="w",
         )
         self.label_status.pack(side="left", fill="x", expand=True)
@@ -419,14 +424,10 @@ class OverlayWindow:
         self.locked = not self.locked
         if self.locked:
             self._apply_click_through()
-            self.label_status.config(
-                text="LOCKED \u2022 F8 Lock \u2022 F9 Hide \u2022 F10 Settings"
-            )
+            self.label_status.config(text=t("status_locked"))
         else:
             self._remove_click_through()
-            self.label_status.config(
-                text="UNLOCKED \u2013 Drag edges to resize \u2022 F8 Lock \u2022 F10 Settings"
-            )
+            self.label_status.config(text=t("status_unlocked"))
 
     def _toggle_visible(self):
         self.visible = not self.visible

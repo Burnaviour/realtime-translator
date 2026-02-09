@@ -36,6 +36,7 @@ DEFAULTS = {
     "whisper_model": "medium",       # tiny, base, small, medium, large-v2
 
     # Language
+    "app_language": "english",       # "english" or "russian" — UI text language
     "source_language": "english",    # "english" or "russian" — YOUR language
     "filter_game_language": True,    # Only process game audio matching expected language
 

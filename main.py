@@ -7,6 +7,7 @@ from audio_capture import SystemAudioLoopback, MicAudioCapture
 from transcriber import Transcriber
 from translator import Translator
 from overlay import OverlayWindow
+from locales import t
 
 SAMPLE_RATE = 16000
 
@@ -96,12 +97,12 @@ class TranslationApp:
             mic_lang_hint = "en"
 
         print("=" * 60)
-        print("  Real-time Voice Translator")
-        print(f"  My language: {src.upper()}")
+        print(f"  {t('console_title')}")
+        print(f"  {t('console_my_lang')}: {src.upper()}")
         print(f"  {game_label}  |  {mic_label}")
         print("=" * 60)
         print()
-        print("[Init] Loading AI models (first run downloads ~1-2 GB)...")
+        print(t("console_loading"))
         print()
 
         # Audio sources
@@ -110,7 +111,7 @@ class TranslationApp:
 
         # Speech recognition (model from settings)
         whisper_model = self.overlay.cfg.get("whisper_model")
-        print(f"[Init] Whisper model: {whisper_model}")
+        print(f"{t('console_whisper_model')}: {whisper_model}")
         self.transcriber = Transcriber(model_size=whisper_model)
 
         # Translation models (direction based on source_language setting)
@@ -132,8 +133,8 @@ class TranslationApp:
         self.running = True
 
         print()
-        print("[Ready] All models loaded.")
-        print("[Keys]  F8 = Lock/Unlock  |  F9 = Show/Hide  |  F10 = Settings  |  Ctrl+C = Quit")
+        print(t("console_ready"))
+        print(t("console_keys"))
         print()
 
     def _find_silence_split(self, buffer, threshold, chunk_size=1024):
@@ -328,7 +329,7 @@ class TranslationApp:
         game_thread.start()
         mic_thread.start()
 
-        print("[Running] Listening... Speak or play game audio.")
+        print(t("console_running"))
         print()
 
         # Ctrl+C handler — tkinter on Windows doesn't propagate KeyboardInterrupt
@@ -336,7 +337,7 @@ class TranslationApp:
         import signal
 
         def _signal_handler(sig, frame):
-            print("\n[Ctrl+C] Shutting down...")
+            print(f"\n{t('console_ctrlc')}")
             self._shutdown()
 
         signal.signal(signal.SIGINT, _signal_handler)
@@ -362,7 +363,7 @@ class TranslationApp:
         if not self.running:
             return  # Already shut down
         self.running = False
-        print("\n[Shutdown] Stopping...")
+        print(f"\n{t('console_shutdown')}")
         try:
             self.system_audio.stop()
         except Exception:
@@ -375,7 +376,7 @@ class TranslationApp:
             self.overlay.stop()
         except Exception:
             pass
-        print("[Shutdown] Done.")
+        print(t("console_shutdown_done"))
         # Force-exit to avoid Fortran / native-library cleanup errors
         import os
         os._exit(0)
@@ -388,8 +389,8 @@ if __name__ == "__main__":
     except Exception as e:
         import traceback
         print("\n" + "=" * 60)
-        print("  FATAL ERROR — the program crashed")
+        print(f"  {t('console_fatal')}")
         print("=" * 60)
         traceback.print_exc()
         print("\n" + "=" * 60)
-        input("Press Enter to close this window...")
+        input(t("console_press_enter"))

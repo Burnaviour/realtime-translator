@@ -7,6 +7,7 @@ persisted to settings.json on Save.
 
 import tkinter as tk
 from tkinter import colorchooser, font as tkfont
+from locales import t
 
 
 class SettingsWindow:
@@ -33,8 +34,8 @@ class SettingsWindow:
             return
 
         self.win = tk.Toplevel(parent_root)
-        self.win.title("Translator Settings")
-        self.win.geometry("420x620")
+        self.win.title(t("settings_title"))
+        self.win.geometry("420x660")
         self.win.resizable(False, False)
         self.win.configure(bg="#1c2128")
         self.win.attributes("-topmost", True)
@@ -143,55 +144,57 @@ class SettingsWindow:
 
         self._vars = []  # (var, key, [swatch]) tuples for collect()
 
-        section("Language")
-        self._vars.append(dropdown_row("My language", "source_language",
+        section(t("sec_language"))
+        self._vars.append(dropdown_row(t("lbl_app_language"), "app_language",
                                        ["english", "russian"]))
-        self._vars.append(checkbox_row("Only detect selected game language",
+        self._vars.append(dropdown_row(t("lbl_my_language"), "source_language",
+                                       ["english", "russian"]))
+        self._vars.append(checkbox_row(t("lbl_filter_game"),
                                        "filter_game_language"))
 
-        section("Whisper Model")
-        self._vars.append(dropdown_row("Model size", "whisper_model",
+        section(t("sec_whisper"))
+        self._vars.append(dropdown_row(t("lbl_model_size"), "whisper_model",
                                        ["tiny", "base", "small", "medium", "large-v2"]))
-        tk.Label(frame, text="  tiny=fastest  base  small  medium  large-v2=best accuracy",
+        tk.Label(frame, text=t("lbl_model_hint"),
                  font=("Segoe UI", 8), fg="#7b8794", bg=BG, anchor="w").grid(
             row=row, column=0, columnspan=3, sticky="w", padx=16, pady=(0, 4))
         row += 1
 
-        section("Overlay Size")
-        self._vars.append(slider_row("Width", "overlay_width", 400, 1600))
-        self._vars.append(slider_row("Height", "overlay_height", 80, 400))
-        self._vars.append(slider_row("Opacity", "overlay_opacity", 0.3, 1.0, 0.02, is_float=True))
+        section(t("sec_overlay_size"))
+        self._vars.append(slider_row(t("lbl_width"), "overlay_width", 400, 1600))
+        self._vars.append(slider_row(t("lbl_height"), "overlay_height", 80, 400))
+        self._vars.append(slider_row(t("lbl_opacity"), "overlay_opacity", 0.3, 1.0, 0.02, is_float=True))
 
-        section("Colors  (click swatch to pick)")
-        self._vars.append(color_row("Background", "bg_color"))
-        self._vars.append(color_row("Game text", "game_text_color"))
-        self._vars.append(color_row("Mic text", "mic_text_color"))
-        self._vars.append(color_row("Separator", "accent_color"))
-        self._vars.append(color_row("Status text", "status_color"))
+        section(t("sec_colors"))
+        self._vars.append(color_row(t("lbl_bg_color"), "bg_color"))
+        self._vars.append(color_row(t("lbl_game_text_color"), "game_text_color"))
+        self._vars.append(color_row(t("lbl_mic_text_color"), "mic_text_color"))
+        self._vars.append(color_row(t("lbl_separator_color"), "accent_color"))
+        self._vars.append(color_row(t("lbl_status_color"), "status_color"))
 
-        section("Fonts")
-        self._vars.append(slider_row("Game font size", "game_font_size", 8, 28))
-        self._vars.append(slider_row("Mic font size", "mic_font_size", 8, 24))
+        section(t("sec_fonts"))
+        self._vars.append(slider_row(t("lbl_game_font"), "game_font_size", 8, 28))
+        self._vars.append(slider_row(t("lbl_mic_font"), "mic_font_size", 8, 24))
 
-        section("Streaming / Live Preview")
-        self._vars.append(checkbox_row("Enable live transcription preview", "streaming_enabled"))
-        self._vars.append(slider_row("Preview interval (ms)", "streaming_interval_ms", 500, 3000, 100))
+        section(t("sec_streaming"))
+        self._vars.append(checkbox_row(t("lbl_streaming_enable"), "streaming_enabled"))
+        self._vars.append(slider_row(t("lbl_streaming_interval"), "streaming_interval_ms", 500, 3000, 100))
 
         # ── Buttons ─────────────────────────────────────────────────
         btn_frame = tk.Frame(frame, bg=BG)
         btn_frame.grid(row=row, column=0, columnspan=3, pady=16)
 
-        tk.Button(btn_frame, text="Apply", font=("Segoe UI", 10, "bold"),
+        tk.Button(btn_frame, text=t("btn_apply"), font=("Segoe UI", 10, "bold"),
                   bg=ACCENT, fg="#000", activebackground="#79c0ff",
                   relief="flat", padx=18, pady=4,
                   command=self._apply).pack(side="left", padx=6)
 
-        tk.Button(btn_frame, text="Save", font=("Segoe UI", 10, "bold"),
+        tk.Button(btn_frame, text=t("btn_save"), font=("Segoe UI", 10, "bold"),
                   bg=BTN_BG, fg=BTN_FG, activebackground="#2ea043",
                   relief="flat", padx=18, pady=4,
                   command=self._save).pack(side="left", padx=6)
 
-        tk.Button(btn_frame, text="Reset Defaults", font=("Segoe UI", 10),
+        tk.Button(btn_frame, text=t("btn_reset"), font=("Segoe UI", 10),
                   bg="#da3633", fg="#fff", activebackground="#f85149",
                   relief="flat", padx=12, pady=4,
                   command=self._reset).pack(side="left", padx=6)
