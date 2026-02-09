@@ -154,6 +154,16 @@ class SettingsWindow:
         self._vars.append(checkbox_row(t("lbl_filter_game"),
                                        "filter_game_language"))
 
+        section(t("sec_audio_filter"))
+        self._vars.append(checkbox_row(t("lbl_speech_filter"),
+                                       "speech_filter_enabled"))
+        self._vars.append(slider_row(t("lbl_noise_gate"), "game_noise_gate",
+                                     0.005, 0.05, 0.001, is_float=True))
+        tk.Label(frame, text=t("lbl_noise_gate_hint"),
+                 font=("Segoe UI", 8), fg="#7b8794", bg=BG, anchor="w").grid(
+            row=row, column=0, columnspan=3, sticky="w", padx=16, pady=(0, 4))
+        row += 1
+
         section(t("sec_whisper"))
         self._vars.append(dropdown_row(t("lbl_model_size"), "whisper_model",
                                        ["tiny", "base", "small", "medium", "large-v2"]))

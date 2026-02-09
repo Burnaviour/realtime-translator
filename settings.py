@@ -40,6 +40,11 @@ DEFAULTS = {
     "source_language": "english",    # "english" or "russian" — YOUR language
     "filter_game_language": True,    # Only process game audio matching expected language
 
+    # Audio filtering
+    "speech_filter_enabled": True,   # Band-pass filter (300-3000 Hz) on game audio
+    "game_noise_gate": 0.012,        # RMS threshold for game audio (higher = reject more noise)
+                                     # 0.005 = very sensitive, 0.02 = strict, 0.04 = very strict
+
     # First-run
     "first_run_shown": False,
 }

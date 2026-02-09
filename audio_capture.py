@@ -8,6 +8,70 @@ import warnings
 # (occurs when CPU is briefly busy with AI models — doesn't affect audio quality)
 warnings.filterwarnings("ignore", message=".*data discontinuity.*")
 
+# ── Speech-frequency band-pass filter ──────────────────────────────
+# Human speech is concentrated in 300-3000 Hz.  Filtering the system
+# loopback to this band removes a huge amount of game sound (explosions,
+# music, UI bleeps) before the audio ever reaches Whisper.
+
+try:
+    from scipy.signal import butter, sosfilt
+
+    def _make_bandpass(lowcut=300, highcut=3000, fs=16000, order=5):
+        """Return second-order-section coefficients for a Butterworth bandpass."""
+        nyq = 0.5 * fs
+        low = lowcut / nyq
+        high = highcut / nyq
+        return butter(order, [low, high], btype="band", output="sos")
+
+    _SPEECH_SOS = _make_bandpass()          # pre-computed for 16 kHz
+    _HAS_SCIPY = True
+except ImportError:
+    _HAS_SCIPY = False
+    _SPEECH_SOS = None
+
+
+def speech_bandpass(audio: np.ndarray, sos=None) -> np.ndarray:
+    """Apply a 300-3000 Hz bandpass filter to keep only speech frequencies."""
+    if not _HAS_SCIPY or sos is None:
+        return audio
+    return sosfilt(sos, audio).astype(np.float32)
+
+
+def compute_rms(audio: np.ndarray) -> float:
+    """Root-mean-square energy — better than peak for detecting sustained speech."""
+    if len(audio) == 0:
+        return 0.0
+    return float(np.sqrt(np.mean(audio ** 2)))
+
+
+def is_likely_speech(audio: np.ndarray, sample_rate: int = 16000,
+                     rms_threshold: float = 0.008,
+                     zcr_low: float = 0.02, zcr_high: float = 0.30) -> bool:
+    """
+    Quick heuristic: is this audio chunk likely human speech?
+
+    Checks:
+      1. RMS energy above threshold  (filters silence / very quiet noise)
+      2. Zero-crossing rate in typical speech range
+         - Speech: ~0.02 – 0.25 crossings per sample
+         - Music/noise: often outside this range
+
+    Returns True if the audio looks like speech.
+    """
+    if len(audio) < sample_rate * 0.3:   # need at least 0.3s
+        return False
+
+    rms = compute_rms(audio)
+    if rms < rms_threshold:
+        return False
+
+    # Zero-crossing rate
+    signs = np.sign(audio)
+    crossings = np.sum(np.abs(np.diff(signs)) > 0)
+    zcr = crossings / len(audio)
+
+    return zcr_low <= zcr <= zcr_high
+
 
 class AudioCapture:
     """Base class for audio capture with threaded recording."""
@@ -34,7 +98,16 @@ class AudioCapture:
 
 
 class SystemAudioLoopback(AudioCapture):
-    """Captures system/game audio via WASAPI loopback."""
+    """Captures system/game audio via WASAPI loopback with speech filtering."""
+
+    def __init__(self, sample_rate=16000, block_size=1024, apply_speech_filter=True):
+        super().__init__(sample_rate, block_size)
+        self.apply_speech_filter = apply_speech_filter
+        # Pre-compute filter coefficients for this sample rate
+        if _HAS_SCIPY and apply_speech_filter:
+            self._sos = _make_bandpass(lowcut=300, highcut=3000, fs=sample_rate, order=5)
+        else:
+            self._sos = None
 
     def _capture_loop(self):
         try:
@@ -49,6 +122,11 @@ class SystemAudioLoopback(AudioCapture):
                 return
 
             print(f"[Audio] System loopback: {loopback.name}")
+            if self._sos is not None:
+                print("[Audio] Speech band-pass filter: ENABLED (300-3000 Hz)")
+            else:
+                print("[Audio] Speech band-pass filter: DISABLED")
+
             with loopback.recorder(samplerate=self.sample_rate) as recorder:
                 while self.running:
                     data = recorder.record(numframes=self.block_size)
@@ -57,6 +135,11 @@ class SystemAudioLoopback(AudioCapture):
                     else:
                         data = data.flatten()
                     data = data.astype(np.float32)
+
+                    # Apply speech band-pass filter to strip game sounds
+                    if self._sos is not None:
+                        data = speech_bandpass(data, self._sos)
+
                     if not self.audio_queue.full():
                         self.audio_queue.put(data)
 

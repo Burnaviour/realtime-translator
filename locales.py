@@ -129,6 +129,22 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Only detect selected game language",
         "ru": "Распознавать только выбранный язык игры",
     },
+    "sec_audio_filter": {
+        "en": "Game Audio Filtering",
+        "ru": "Фильтрация Аудио Игры",
+    },
+    "lbl_speech_filter": {
+        "en": "Speech band-pass filter (removes game sounds)",
+        "ru": "Фильтр речевых частот (убирает звуки игры)",
+    },
+    "lbl_noise_gate": {
+        "en": "Game noise gate (higher = stricter)",
+        "ru": "Порог шума игры (выше = строже)",
+    },
+    "lbl_noise_gate_hint": {
+        "en": "  0.005=sensitive  0.012=default  0.025=strict  0.04=very strict",
+        "ru": "  0.005=чувствит.  0.012=обычный  0.025=строгий  0.04=очень строгий",
+    },
     "lbl_model_size": {
         "en": "Model size",
         "ru": "Размер модели",

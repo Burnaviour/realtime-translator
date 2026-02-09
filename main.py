@@ -3,7 +3,10 @@ import time
 import queue
 import numpy as np
 
-from audio_capture import SystemAudioLoopback, MicAudioCapture
+from audio_capture import (
+    SystemAudioLoopback, MicAudioCapture,
+    compute_rms, is_likely_speech,
+)
 from transcriber import Transcriber
 from translator import Translator
 from overlay import OverlayWindow
@@ -110,7 +113,11 @@ class TranslationApp:
         print()
 
         # Audio sources
-        self.system_audio = SystemAudioLoopback(sample_rate=SAMPLE_RATE)
+        speech_filter = self.overlay.cfg.get("speech_filter_enabled")
+        self.system_audio = SystemAudioLoopback(
+            sample_rate=SAMPLE_RATE,
+            apply_speech_filter=speech_filter,
+        )
         self.mic_audio = MicAudioCapture(sample_rate=SAMPLE_RATE)
 
         # Speech recognition (model from settings)
@@ -168,25 +175,55 @@ class TranslationApp:
         While speech is being buffered, periodically transcribe the buffer-so-far
         and push a dimmed "preview" to the overlay.  When silence boundary is
         detected, do the full transcription + translation as the "final" result.
+
+        Game audio pipeline has extra filtering:
+          - Higher energy threshold (game sounds are louder but non-speech)
+          - RMS-based detection (speech has sustained energy)
+          - Zero-crossing rate check (speech vs. noise/music)
+          - Configurable noise gate from settings
         """
         buffer = np.array([], dtype=np.float32)
         min_samples = int(SAMPLE_RATE * 0.8)   # 0.8s — allow short phrases like "ok"
         max_samples = int(SAMPLE_RATE * 20)
-        silence_threshold = 0.005
+
+        is_game = self._is_game_source(label)
+
+        # Game audio uses a higher noise gate to reject game sounds
+        # Mic uses a lower threshold since it's a clean(er) signal
+        if is_game:
+            noise_gate = self._settings.get("game_noise_gate")
+            silence_threshold = max(0.005, noise_gate)
+            rms_threshold = max(0.004, noise_gate * 0.8)
+        else:
+            silence_threshold = 0.005
+            rms_threshold = 0.003
+
         consecutive_silent = 0
         silence_trigger = 10
 
         # Streaming preview state
         last_preview_time = time.time()
         preview_min_samples = int(SAMPLE_RATE * 1.0)  # Need >=1s for preview
+        # Limit concurrent preview threads to reduce CPU load
+        preview_in_progress = threading.Event()
 
         while self.running:
             try:
                 chunk = audio_source.audio_queue.get(timeout=0.3)
             except queue.Empty:
                 if len(buffer) >= min_samples:
-                    energy = np.max(np.abs(buffer))
-                    if energy > silence_threshold:
+                    rms = compute_rms(buffer)
+                    if rms > rms_threshold:
+                        # For game audio, also check speech characteristics
+                        if is_game and not is_likely_speech(
+                            buffer, SAMPLE_RATE, rms_threshold
+                        ):
+                            print(f"[{label}] Skipped — audio doesn't look like speech "
+                                  f"(RMS={rms:.4f})")
+                            buffer = np.array([], dtype=np.float32)
+                            consecutive_silent = 0
+                            last_preview_time = time.time()
+                            continue
                         self._transcribe_and_translate(
                             buffer, language, translator, update_func, label
                         )
@@ -197,25 +234,28 @@ class TranslationApp:
 
             buffer = np.concatenate((buffer, chunk))
 
-            # Track silence
-            chunk_energy = np.max(np.abs(chunk))
-            if chunk_energy < silence_threshold:
+            # Track silence using RMS (more robust than peak)
+            chunk_rms = compute_rms(chunk)
+            if chunk_rms < silence_threshold:
                 consecutive_silent += 1
             else:
                 consecutive_silent = 0
 
             # ── Streaming preview ───────────────────────────────────
+            # Only run one preview at a time to reduce CPU load
             if (self.overlay.is_streaming_enabled()
                     and len(buffer) >= preview_min_samples
-                    and consecutive_silent < silence_trigger):
+                    and consecutive_silent < silence_trigger
+                    and not preview_in_progress.is_set()):
                 now = time.time()
                 interval_s = self.overlay.streaming_interval_ms() / 1000.0
                 if now - last_preview_time >= interval_s:
                     last_preview_time = now
+                    preview_in_progress.set()
                     threading.Thread(
                         target=self._preview_transcribe,
                         args=(buffer.copy(), language, translator,
-                              preview_func, label),
+                              preview_func, label, preview_in_progress),
                         daemon=True,
                     ).start()
 
@@ -227,8 +267,19 @@ class TranslationApp:
                 should_process = True
 
             if should_process:
-                energy = np.max(np.abs(buffer))
-                if energy > silence_threshold:
+                rms = compute_rms(buffer)
+                if rms > rms_threshold:
+                    # For game audio, verify it looks like speech before processing
+                    if is_game and not is_likely_speech(
+                        buffer, SAMPLE_RATE, rms_threshold
+                    ):
+                        print(f"[{label}] Skipped — not speech "
+                              f"(RMS={rms:.4f})")
+                        buffer = np.array([], dtype=np.float32)
+                        consecutive_silent = 0
+                        last_preview_time = time.time()
+                        continue
+
                     if len(buffer) >= max_samples:
                         split_at = self._find_silence_split(buffer, silence_threshold)
                         process_buf = buffer[:split_at]
@@ -257,7 +308,8 @@ class TranslationApp:
         """Check if language filtering is enabled in settings."""
         return self._settings.get("filter_game_language")
 
-    def _preview_transcribe(self, audio, language, translator, preview_func, label):
+    def _preview_transcribe(self, audio, language, translator, preview_func,
+                            label, done_event=None):
         """Streaming preview: transcribe + translate so the user sees their language."""
         try:
             # For game audio with filtering ON, use language detection
@@ -276,6 +328,9 @@ class TranslationApp:
                     preview_func(translated)
         except Exception:
             pass
+        finally:
+            if done_event is not None:
+                done_event.clear()
 
     def _transcribe_and_translate(self, audio, language, translator, update_func, label):
         """Transcribe an audio segment and translate the result."""
