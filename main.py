@@ -21,6 +21,10 @@ HALLUCINATIONS = frozenset({
     "copyright", "please subscribe", "like and subscribe",
     "sync corrected", "elderman", "elder_man",
     "the end", "www", "http",
+    # Whisper prompt leak hallucinations
+    "this is a conversation in english",
+    "this is a conversation in english. this is a conversation in english",
+    "это разговор на русском языке",
     # Russian — subtitle / broadcast artifacts only
     "субтитры", "продолжение следует",
     "спасибо за просмотр", "подписывайтесь",
@@ -342,8 +346,9 @@ class TranslationApp:
 
         signal.signal(signal.SIGINT, _signal_handler)
 
-        # Wire close button on overlay to clean shutdown
+        # Wire close / restart buttons on overlay
         self.overlay.set_on_close(self._shutdown)
+        self.overlay.set_on_restart(self._restart)
 
         # Periodic check keeps the signal handler responsive
         def _keepalive():
@@ -380,6 +385,28 @@ class TranslationApp:
         # Force-exit to avoid Fortran / native-library cleanup errors
         import os
         os._exit(0)
+
+    def _restart(self):
+        """Save settings, stop everything, and re-launch the process."""
+        if not self.running:
+            return
+        self.running = False
+        print(f"\n{t('console_restarting')}")
+        try:
+            self.overlay.stop()
+        except Exception:
+            pass
+        try:
+            self.system_audio.stop()
+        except Exception:
+            pass
+        try:
+            self.mic_audio.stop()
+        except Exception:
+            pass
+        import sys, os
+        # Re-launch the same process
+        os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@
   "streaming_enabled": true,
   "streaming_interval_ms": 1200,
   "whisper_model": "small",
-  "app_language": "russian",
+  "app_language": "english",
   "source_language": "english",
   "filter_game_language": true,
   "first_run_shown": true

@@ -197,6 +197,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Reset Defaults",
         "ru": "Сбросить",
     },
+    "btn_restart": {
+        "en": "Save & Restart",
+        "ru": "Сохранить и Перезапустить",
+    },
+    "console_restarting": {
+        "en": "[Restart] Restarting application...",
+        "ru": "[Перезапуск] Перезапуск приложения...",
+    },
 
     # ── Console / main.py ──────────────────────────────────────────
     "console_title": {

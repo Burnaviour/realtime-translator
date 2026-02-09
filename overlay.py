@@ -42,9 +42,14 @@ class OverlayWindow:
         self._resizing = False
         self._resize_edge = None
         self._on_close_callback = None   # set by main app for clean exit
+        self._on_restart_callback = None  # set by main app for restart
 
         # Settings window (lazy)
-        self._settings_win = SettingsWindow(self.cfg, on_apply_callback=self._apply_settings)
+        self._settings_win = SettingsWindow(
+            self.cfg,
+            on_apply_callback=self._apply_settings,
+            on_restart_callback=lambda: self._request_restart(),
+        )
 
         self._build()
         self._setup_hotkeys()
@@ -223,6 +228,14 @@ class OverlayWindow:
         self.btn_close.pack(side="right", padx=(8, 0))
         self.btn_close.bind("<Button-1>", lambda e: self._request_close())
 
+        # ↻ restart button
+        self.btn_restart = tk.Label(
+            status_row, text="\u21bb", font=(font, 13),
+            fg=c.get("status_color"), bg=bg, cursor="hand2",
+        )
+        self.btn_restart.pack(side="right", padx=(8, 0))
+        self.btn_restart.bind("<Button-1>", lambda e: self._request_restart())
+
         # ⚙ gear button (always visible, even when locked)
         self.btn_settings = tk.Label(
             status_row, text="\u2699", font=(font, 13),
@@ -284,6 +297,7 @@ class OverlayWindow:
         self.label_status.config(fg=sc_, bg=bg)
         self.btn_settings.config(fg=sc_, bg=bg)
         self.btn_close.config(fg=sc_, bg=bg)
+        self.btn_restart.config(fg=sc_, bg=bg)
 
     # ════════════════════════════════════════════════════════════════
     #  DRAG & RESIZE
@@ -293,6 +307,10 @@ class OverlayWindow:
         """Register a callback invoked when the user clicks the ✕ button."""
         self._on_close_callback = callback
 
+    def set_on_restart(self, callback):
+        """Register a callback invoked when the user clicks the ↻ button."""
+        self._on_restart_callback = callback
+
     def _request_close(self):
         """Handle the ✕ close button click."""
         if self._on_close_callback:
@@ -300,10 +318,17 @@ class OverlayWindow:
         else:
             self.stop()
 
+    def _request_restart(self):
+        """Handle the ↻ restart button click."""
+        if self._on_restart_callback:
+            self._on_restart_callback()
+        else:
+            self.stop()
+
     def _bind_drag_recursive(self, widget):
         """Bind drag/resize events to a widget and all its descendants."""
         # Skip the gear / close buttons — they have their own click handlers
-        if widget is self.btn_settings or widget is self.btn_close:
+        if widget in (self.btn_settings, self.btn_close, self.btn_restart):
             return
         widget.bind("<Button-1>", self._on_press)
         widget.bind("<B1-Motion>", self._on_motion)

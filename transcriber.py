@@ -52,11 +52,6 @@ class Transcriber:
             }
             if language:
                 kwargs["language"] = language
-                # Prompt hints improve accuracy for accented speech
-                if language == "en":
-                    kwargs["initial_prompt"] = "This is a conversation in English."
-                elif language == "ru":
-                    kwargs["initial_prompt"] = "Это разговор на русском языке."
 
             segments, info = self.model.transcribe(audio_data, **kwargs)
             text = " ".join(seg.text for seg in segments).strip()
@@ -93,11 +88,6 @@ class Transcriber:
                 "vad_parameters": {"min_silence_duration_ms": 400},
             }
             # Do NOT force language — let Whisper auto-detect so we can filter
-            if language:
-                if language == "en":
-                    kwargs["initial_prompt"] = "This is a conversation in English."
-                elif language == "ru":
-                    kwargs["initial_prompt"] = "Это разговор на русском языке."
 
             segments, info = self.model.transcribe(audio_data, **kwargs)
             text = " ".join(seg.text for seg in segments).strip()

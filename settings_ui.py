@@ -15,14 +15,16 @@ class SettingsWindow:
     Spawns a settings panel.  Call open() from the overlay's main thread.
     """
 
-    def __init__(self, settings, on_apply_callback=None):
+    def __init__(self, settings, on_apply_callback=None, on_restart_callback=None):
         """
         Args:
             settings:  a Settings instance (from settings.py)
             on_apply_callback:  callable() invoked after every live apply
+            on_restart_callback: callable() invoked to restart the app
         """
         self.settings = settings
         self.on_apply = on_apply_callback
+        self.on_restart = on_restart_callback
         self.win = None
 
     # ── Public ──────────────────────────────────────────────────────
@@ -199,6 +201,15 @@ class SettingsWindow:
                   relief="flat", padx=12, pady=4,
                   command=self._reset).pack(side="left", padx=6)
 
+        # Second row for restart
+        btn_frame2 = tk.Frame(frame, bg=BG)
+        btn_frame2.grid(row=row + 1, column=0, columnspan=3, pady=(0, 16))
+
+        tk.Button(btn_frame2, text=t("btn_restart"), font=("Segoe UI", 10, "bold"),
+                  bg="#8957e5", fg="#fff", activebackground="#a371f7",
+                  relief="flat", padx=18, pady=4,
+                  command=self._save_and_restart).pack()
+
     # ── Actions ─────────────────────────────────────────────────────
 
     def _collect(self):
@@ -228,3 +239,10 @@ class SettingsWindow:
             self.win = None
         if self.on_apply:
             self.on_apply()
+
+    def _save_and_restart(self):
+        """Save settings and restart the application."""
+        self._collect()
+        self.settings.save()
+        if self.on_restart:
+            self.on_restart()
