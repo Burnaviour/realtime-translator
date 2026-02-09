@@ -1,0 +1,10 @@
+torch
+torchaudio
+--index-url https://download.pytorch.org/whl/cu128
+faster-whisper
+soundcard
+numpy<2.0
+transformers
+sentencepiece
+sacremoses
+keyboard

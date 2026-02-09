@@ -1,0 +1,17 @@
+{
+  "overlay_width": 900,
+  "overlay_height": 140,
+  "overlay_x": 510,
+  "overlay_y": 860,
+  "overlay_opacity": 0.88,
+  "bg_color": "#0d1117",
+  "game_text_color": "#58d68d",
+  "mic_text_color": "#5dade2",
+  "accent_color": "#444c56",
+  "status_color": "#7b8794",
+  "font_family": "Segoe UI",
+  "game_font_size": 14,
+  "mic_font_size": 12,
+  "streaming_enabled": true,
+  "streaming_interval_ms": 1200
+}
