@@ -46,15 +46,15 @@ def compute_rms(audio: np.ndarray) -> float:
 
 def is_likely_speech(audio: np.ndarray, sample_rate: int = 16000,
                      rms_threshold: float = 0.008,
-                     zcr_low: float = 0.02, zcr_high: float = 0.30) -> bool:
+                     bandpass_applied: bool = False) -> bool:
     """
     Quick heuristic: is this audio chunk likely human speech?
 
-    Checks:
-      1. RMS energy above threshold  (filters silence / very quiet noise)
-      2. Zero-crossing rate in typical speech range
-         - Speech: ~0.02 – 0.25 crossings per sample
-         - Music/noise: often outside this range
+    When bandpass_applied=True (audio already filtered to 300-3000 Hz),
+    only checks RMS energy — the filter itself removes non-speech sounds,
+    and ZCR is unreliable on filtered audio.
+
+    When bandpass_applied=False (raw audio), also checks zero-crossing rate.
 
     Returns True if the audio looks like speech.
     """
@@ -65,12 +65,17 @@ def is_likely_speech(audio: np.ndarray, sample_rate: int = 16000,
     if rms < rms_threshold:
         return False
 
-    # Zero-crossing rate
+    # If band-pass filter already applied, RMS check is enough —
+    # the filter stripped non-speech frequencies already.
+    if bandpass_applied:
+        return True
+
+    # For raw (unfiltered) audio, also check zero-crossing rate
     signs = np.sign(audio)
     crossings = np.sum(np.abs(np.diff(signs)) > 0)
     zcr = crossings / len(audio)
 
-    return zcr_low <= zcr <= zcr_high
+    return 0.02 <= zcr <= 0.30
 
 
 class AudioCapture:

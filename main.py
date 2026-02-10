@@ -10,6 +10,7 @@ from audio_capture import (
 from transcriber import Transcriber
 from translator import Translator
 from overlay import OverlayWindow
+from glossary import apply_gaming_glossary
 from locales import t
 
 SAMPLE_RATE = 16000
@@ -39,6 +40,38 @@ import re
 _REPEAT_PATTERN = re.compile(r"^(.{2,15})\s*(\1[\s,.!?]*){2,}$", re.IGNORECASE)
 
 
+def _is_repetitive_translation(text: str) -> bool:
+    """
+    Detect when a translation has excessive word-level repetition.
+    E.g., "Whoa" repeated 50+ times, "weight" repeated 70 times.
+    """
+    if not text or len(text) < 40:
+        return False
+
+    words = text.lower().split()
+    if len(words) < 6:  # Changed from 10 to 6 to catch shorter spam
+        return False
+
+    # Count word frequency (strip common punctuation)
+    from collections import Counter
+    cleaned_words = [w.strip('.,!?;:"\'-') for w in words]
+    word_counts = Counter(cleaned_words)
+    # If ANY single word appears more than 6 times, it's likely spam
+    for word, count in word_counts.items():
+        if len(word) >= 2 and count >= 6:
+            return True
+
+    # Also check if top 2 words make up >60% of the text
+    total = len(words)
+    top_two = word_counts.most_common(2)
+    if len(top_two) >= 2:
+        top_two_count = top_two[0][1] + top_two[1][1]
+        if top_two_count / total > 0.6:
+            return True
+
+    return False
+
+
 def is_hallucination(text: str) -> bool:
     """Return True if the text is likely a Whisper hallucination."""
     if not text:
@@ -54,6 +87,37 @@ def is_hallucination(text: str) -> bool:
 
     # Direct exact match against known artifacts
     if stripped in HALLUCINATIONS:
+        return True
+
+    # Repeated-character spam: "Ааааааааа...", "ههههه...", etc.
+    # (Common when the input is noise/music but the model tries to form text.)
+    if len(stripped) >= 20:  # Lowered from 30 to catch shorter spam
+        # Ignore spaces for this check
+        compact = "".join(ch for ch in stripped if not ch.isspace())
+        if compact:
+            from collections import Counter
+            counts = Counter(compact)
+            most_common = counts.most_common(1)[0][1]
+            # More aggressive: 75% same character (was 85%)
+            if most_common / len(compact) >= 0.75:
+                return True
+            # Also catch very low character variety on long strings
+            if len(compact) >= 80 and len(counts) <= 3:
+                return True
+
+    # Subtitle/credit boilerplate patterns that show up in videos/streams
+    # (Not useful for voice chat translation.)
+    if (
+        "редактор субтитров" in stripped
+        or "корректор" in stripped
+        or "subtitles" in stripped
+        or "subtitle" in stripped
+        or "sync corrected" in stripped
+        or "@elder_man" in stripped
+        or "elderman" in stripped
+        or "закомолдина" in stripped
+        or "голубкина" in stripped
+    ):
         return True
 
     # Repetition detection: "word word word word" or "фраза фраза фраза"
@@ -113,7 +177,8 @@ class TranslationApp:
         print()
 
         # Audio sources
-        speech_filter = self.overlay.cfg.get("speech_filter_enabled")
+        clean_mode = self.overlay.cfg.get("clean_audio_mode")
+        speech_filter = self.overlay.cfg.get("speech_filter_enabled") and not clean_mode
         self.system_audio = SystemAudioLoopback(
             sample_rate=SAMPLE_RATE,
             apply_speech_filter=speech_filter,
@@ -123,11 +188,22 @@ class TranslationApp:
         # Speech recognition (model from settings)
         whisper_model = self.overlay.cfg.get("whisper_model")
         print(f"{t('console_whisper_model')}: {whisper_model}")
-        self.transcriber = Transcriber(model_size=whisper_model)
+        self.transcriber = Transcriber(
+            model_size=whisper_model,
+            clean_audio_mode=clean_mode,
+        )
 
         # Translation models (direction based on source_language setting)
-        self.translator_game = Translator(source_lang=game_src, target_lang=game_tgt)
-        self.translator_mic = Translator(source_lang=mic_src, target_lang=mic_tgt)
+        trans_model = self.overlay.cfg.get("translation_model")
+        print(f"[Init] Translation model: {trans_model}")
+        self.translator_game = Translator(
+            source_lang=game_src, target_lang=game_tgt,
+            translation_model=trans_model,
+        )
+        self.translator_mic = Translator(
+            source_lang=mic_src, target_lang=mic_tgt,
+            translation_model=trans_model,
+        )
 
         self.game_lang_hint = game_lang_hint
         self.mic_lang_hint = mic_lang_hint
@@ -187,13 +263,20 @@ class TranslationApp:
         max_samples = int(SAMPLE_RATE * 20)
 
         is_game = self._is_game_source(label)
+        bandpass_on = is_game and self._settings.get("speech_filter_enabled")
 
-        # Game audio uses a higher noise gate to reject game sounds
-        # Mic uses a lower threshold since it's a clean(er) signal
+        # Game audio uses a noise gate from settings.
+        # When band-pass filter is active, use LOWER thresholds because
+        # the filter already strips non-speech energy.
         if is_game:
             noise_gate = self._settings.get("game_noise_gate")
-            silence_threshold = max(0.005, noise_gate)
-            rms_threshold = max(0.004, noise_gate * 0.8)
+            if bandpass_on:
+                # Band-pass reduces overall RMS — use gentler thresholds
+                silence_threshold = max(0.003, noise_gate * 0.5)
+                rms_threshold = max(0.002, noise_gate * 0.4)
+            else:
+                silence_threshold = max(0.005, noise_gate)
+                rms_threshold = max(0.004, noise_gate * 0.8)
         else:
             silence_threshold = 0.005
             rms_threshold = 0.003
@@ -214,9 +297,10 @@ class TranslationApp:
                 if len(buffer) >= min_samples:
                     rms = compute_rms(buffer)
                     if rms > rms_threshold:
-                        # For game audio, also check speech characteristics
-                        if is_game and not is_likely_speech(
-                            buffer, SAMPLE_RATE, rms_threshold
+                        # For game audio WITHOUT bandpass, check speech characteristics
+                        if is_game and not bandpass_on and not is_likely_speech(
+                            buffer, SAMPLE_RATE, rms_threshold,
+                            bandpass_applied=False,
                         ):
                             print(f"[{label}] Skipped — audio doesn't look like speech "
                                   f"(RMS={rms:.4f})")
@@ -269,9 +353,10 @@ class TranslationApp:
             if should_process:
                 rms = compute_rms(buffer)
                 if rms > rms_threshold:
-                    # For game audio, verify it looks like speech before processing
-                    if is_game and not is_likely_speech(
-                        buffer, SAMPLE_RATE, rms_threshold
+                    # For game audio WITHOUT bandpass, verify it looks like speech
+                    if is_game and not bandpass_on and not is_likely_speech(
+                        buffer, SAMPLE_RATE, rms_threshold,
+                        bandpass_applied=False,
                     ):
                         print(f"[{label}] Skipped — not speech "
                               f"(RMS={rms:.4f})")
@@ -317,8 +402,13 @@ class TranslationApp:
                 text, detected_lang, prob = self.transcriber.transcribe_with_lang(
                     audio, language=language
                 )
-                if detected_lang != language:
-                    return  # silently skip — wrong language
+                # Clean audio mode: be more lenient (skip only at >90%)
+                # Normal mode: skip at >75%
+                clean_mode = self._settings.get("clean_audio_mode")
+                threshold = 0.9 if clean_mode else 0.75
+                
+                if detected_lang != language and prob > threshold:
+                    return  # silently skip — confidently wrong language
             else:
                 text = self.transcriber.transcribe_text(audio, language=language)
 
@@ -335,24 +425,50 @@ class TranslationApp:
     def _transcribe_and_translate(self, audio, language, translator, update_func, label):
         """Transcribe an audio segment and translate the result."""
         try:
+            t0 = time.time()
+            clean_mode = self._settings.get("clean_audio_mode")
+            threshold = 0.9 if clean_mode else 0.75
+            
             # For game audio with filtering ON, detect language and skip mismatches
             if self._is_game_source(label) and self._should_filter_language():
                 text, detected_lang, prob = self.transcriber.transcribe_with_lang(
                     audio, language=language
                 )
-                if detected_lang != language:
+                
+                if detected_lang != language and prob > threshold:
                     print(f"[{label}] Skipped — detected '{detected_lang}' "
                           f"(prob {prob:.0%}), expected '{language}'")
                     return
+                elif detected_lang != language:
+                    # Low confidence mismatch — re-transcribe with forced language
+                    # since the detection is unreliable
+                    print(f"[{label}] Low-confidence '{detected_lang}' ({prob:.0%}) "
+                          f"— forcing '{language}' transcription")
+                    text = self.transcriber.transcribe_text(audio, language=language)
             else:
                 text = self.transcriber.transcribe_text(audio, language=language)
 
             if not text or is_hallucination(text):
                 return
 
+            t1 = time.time()
             translated = translator.translate(text)
+            t2 = time.time()
+            
             if translated and translated.strip():
-                print(f'[{label}] "{text}" -> "{translated}"')
+                # Post-translation filter: catch garbage/repeated output
+                if is_hallucination(translated) or _is_repetitive_translation(translated):
+                    print(f'[{label}] Blocked repetitive/garbage translation: "{text}"')
+                    return
+                
+                # Apply Gaming Glossary / Context Fixes
+                translated = apply_gaming_glossary(translated)
+                
+                latency_transcribe = (t1 - t0) * 1000
+                latency_translate = (t2 - t1) * 1000
+                total_latency = (t2 - t0) * 1000
+                
+                print(f'[{label}] "{text}" -> "{translated}" [Tr: {latency_transcribe:.0f}ms | Tl: {latency_translate:.0f}ms | Total: {total_latency:.0f}ms]')
                 update_func(translated)
         except Exception as e:
             print(f"[{label}] Processing error: {e}")

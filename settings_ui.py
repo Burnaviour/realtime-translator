@@ -70,7 +70,20 @@ class SettingsWindow:
         # Helper to bind mouse wheel
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        # Bind mousewheel only when hovering over the canvas
+        def _bind_mousewheel(event):
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        def _unbind_mousewheel(event):
+            canvas.unbind_all("<MouseWheel>")
+        
+        frame.bind("<Enter>", _bind_mousewheel)
+        frame.bind("<Leave>", _unbind_mousewheel)
+        
+        # Cleanup on window destroy
+        def _cleanup():
+            canvas.unbind_all("<MouseWheel>")
+        self.win.protocol("WM_DELETE_WINDOW", lambda: (_cleanup(), self.win.destroy()))
 
         row = 0
 
@@ -155,6 +168,8 @@ class SettingsWindow:
                                        "filter_game_language"))
 
         section(t("sec_audio_filter"))
+        self._vars.append(checkbox_row(t("lbl_clean_audio_mode"),
+                                       "clean_audio_mode"))
         self._vars.append(checkbox_row(t("lbl_speech_filter"),
                                        "speech_filter_enabled"))
         self._vars.append(slider_row(t("lbl_noise_gate"), "game_noise_gate",
@@ -168,6 +183,15 @@ class SettingsWindow:
         self._vars.append(dropdown_row(t("lbl_model_size"), "whisper_model",
                                        ["tiny", "base", "small", "medium", "large-v2"]))
         tk.Label(frame, text=t("lbl_model_hint"),
+                 font=("Segoe UI", 8), fg="#7b8794", bg=BG, anchor="w").grid(
+            row=row, column=0, columnspan=3, sticky="w", padx=16, pady=(0, 4))
+        row += 1
+
+        section(t("sec_translation"))
+        self._vars.append(dropdown_row(t("lbl_trans_model"), "translation_model",
+                                       ["opus-mt", "opus-mt-big", "nllb-600M", "nllb-1.3B",
+                                        "nllb-600M-ct2", "nllb-1.3B-ct2"]))
+        tk.Label(frame, text=t("lbl_trans_model_hint"),
                  font=("Segoe UI", 8), fg="#7b8794", bg=BG, anchor="w").grid(
             row=row, column=0, columnspan=3, sticky="w", padx=16, pady=(0, 4))
         row += 1

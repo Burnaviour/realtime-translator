@@ -133,6 +133,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Game Audio Filtering",
         "ru": "Фильтрация Аудио Игры",
     },
+    "lbl_clean_audio_mode": {
+        "en": "Clean audio mode (good mic, low game volume)",
+        "ru": "Режим чистого аудио (хороший микрофон, тихая игра)",
+    },
     "lbl_speech_filter": {
         "en": "Speech band-pass filter (removes game sounds)",
         "ru": "Фильтр речевых частот (убирает звуки игры)",
@@ -152,6 +156,18 @@ _STRINGS: dict[str, dict[str, str]] = {
     "lbl_model_hint": {
         "en": "  tiny=fastest  base  small  medium  large-v2=best accuracy",
         "ru": "  tiny=быстрая  base  small  medium  large-v2=лучшая точность",
+    },
+    "sec_translation": {
+        "en": "Translation Model",
+        "ru": "Модель Перевода",
+    },
+    "lbl_trans_model": {
+        "en": "Translation model",
+        "ru": "Модель перевода",
+    },
+    "lbl_trans_model_hint": {
+        "en": "  opus-mt=fast  opus-mt-big=better  nllb-600M=best  nllb-1.3B=highest",
+        "ru": "  opus-mt=быстр  opus-mt-big=лучше  nllb-600M=лучшая  nllb-1.3B=макс",
     },
     "lbl_width": {
         "en": "Width",

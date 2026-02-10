@@ -5,9 +5,10 @@ from faster_whisper import WhisperModel
 class Transcriber:
     """Speech-to-text using faster-whisper with automatic CUDA/CPU detection."""
 
-    def __init__(self, model_size="small"):
+    def __init__(self, model_size="small", clean_audio_mode=False):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.compute_type = "float16" if self.device == "cuda" else "int8"
+        self.clean_audio_mode = clean_audio_mode
 
         print(f"[Whisper] Loading '{model_size}' on {self.device} ({self.compute_type})...")
         try:
@@ -31,7 +32,8 @@ class Transcriber:
         
         Args:
             audio_data: numpy array of audio samples
-            language: language hint ('ru', 'en', etc.) for better accuracy
+            language: forced language code ('ru', 'en', etc.) — Whisper will
+                      only look for this language, preventing misdetection.
         
         Returns:
             Transcribed text string, or empty string on failure.
@@ -40,18 +42,41 @@ class Transcriber:
             return ""
 
         try:
+            # Lower temp + no cross-segment conditioning reduces hallucinations
+            # on noisy / gaming audio.
             kwargs = {
                 "beam_size": 5,
-                "best_of": 3,
-                "patience": 1.5,
-                "temperature": [0.0, 0.2, 0.4, 0.6],
-                "compression_ratio_threshold": 2.4,
-                "condition_on_previous_text": True,
+                "best_of": 5,
+                "patience": 1.0,
+                "temperature": [0.0, 0.2],
+                "compression_ratio_threshold": 2.0,
+                # Drop low-confidence / non-speech segments early
+                "log_prob_threshold": -0.8,
+                "no_speech_threshold": 0.75,
+                # Reduce repetitive gibberish
+                "repetition_penalty": 1.15,
+                "no_repeat_ngram_size": 3,
+                "condition_on_previous_text": False,
                 "vad_filter": True,
-                "vad_parameters": {"min_silence_duration_ms": 400},
             }
+            
+            # Clean audio mode: gentler VAD to respect natural pauses
+            if self.clean_audio_mode:
+                kwargs["vad_parameters"] = {
+                    "min_silence_duration_ms": 1200,  # Longer gap for TTS/clean audio
+                    "speech_pad_ms": 400,
+                }
+            else:
+                kwargs["vad_parameters"] = {"min_silence_duration_ms": 400}
             if language:
                 kwargs["language"] = language
+                # Provide an initial prompt that anchors the language context.
+                # This dramatically reduces Whisper misdetecting the language
+                # on short or noisy audio clips.
+                if language == "en":
+                    kwargs["initial_prompt"] = "This is a conversation in English."
+                elif language == "ru":
+                    kwargs["initial_prompt"] = "Это разговор на русском языке."
 
             segments, info = self.model.transcribe(audio_data, **kwargs)
             text = " ".join(seg.text for seg in segments).strip()
@@ -66,8 +91,8 @@ class Transcriber:
         
         Args:
             audio_data: numpy array of audio samples
-            language: language hint ('ru', 'en', etc.) — NOT forced when
-                      we want auto-detection
+            language: expected language hint ('ru', 'en', etc.) — NOT forced,
+                      but used as initial_prompt to nudge detection.
         
         Returns:
             (text, detected_language, language_probability) tuple.
@@ -79,15 +104,33 @@ class Transcriber:
         try:
             kwargs = {
                 "beam_size": 5,
-                "best_of": 3,
-                "patience": 1.5,
-                "temperature": [0.0, 0.2, 0.4, 0.6],
-                "compression_ratio_threshold": 2.4,
-                "condition_on_previous_text": True,
+                "best_of": 5,
+                "patience": 1.0,
+                "temperature": [0.0, 0.2],
+                "compression_ratio_threshold": 2.0,
+                "log_prob_threshold": -0.8,
+                "no_speech_threshold": 0.75,
+                "repetition_penalty": 1.15,
+                "no_repeat_ngram_size": 3,
+                "condition_on_previous_text": False,
                 "vad_filter": True,
-                "vad_parameters": {"min_silence_duration_ms": 400},
             }
-            # Do NOT force language — let Whisper auto-detect so we can filter
+            
+            # Clean audio mode: gentler VAD
+            if self.clean_audio_mode:
+                kwargs["vad_parameters"] = {
+                    "min_silence_duration_ms": 1200,
+                    "speech_pad_ms": 400,
+                }
+            else:
+                kwargs["vad_parameters"] = {"min_silence_duration_ms": 400}
+            
+            # Do NOT force language — let Whisper auto-detect so we can filter.
+            # But provide a gentle hint via initial_prompt.
+            if language == "ru":
+                kwargs["initial_prompt"] = "Это разговор на русском языке."
+            elif language == "en":
+                kwargs["initial_prompt"] = "This is a conversation in English."
 
             segments, info = self.model.transcribe(audio_data, **kwargs)
             text = " ".join(seg.text for seg in segments).strip()

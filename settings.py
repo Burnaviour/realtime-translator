@@ -35,6 +35,9 @@ DEFAULTS = {
     # Whisper model
     "whisper_model": "medium",       # tiny, base, small, medium, large-v2
 
+    # Translation model
+    "translation_model": "nllb-600M", # opus-mt, opus-mt-big, nllb-600M, nllb-1.3B
+
     # Language
     "app_language": "english",       # "english" or "russian" — UI text language
     "source_language": "english",    # "english" or "russian" — YOUR language
@@ -44,6 +47,8 @@ DEFAULTS = {
     "speech_filter_enabled": True,   # Band-pass filter (300-3000 Hz) on game audio
     "game_noise_gate": 0.012,        # RMS threshold for game audio (higher = reject more noise)
                                      # 0.005 = very sensitive, 0.02 = strict, 0.04 = very strict
+    "clean_audio_mode": False,       # Optimize for clear voice chat (disable band-pass, gentle VAD)
+                                     # Enable when friend uses good mic & game sounds are low
 
     # First-run
     "first_run_shown": False,
