@@ -5,6 +5,9 @@ from transformers import (
     MarianMTModel, MarianTokenizer,
     AutoModelForSeq2SeqLM, AutoTokenizer,
 )
+from logger_config import get_logger
+
+logger = get_logger("Translator")
 
 # ── Model registry ──────────────────────────────────────────────────
 # Each entry: (how to build the HF model name, tokenizer class, model class, extra kwargs for generate)
@@ -91,11 +94,11 @@ class Translator:
             repo = "entai2965/nllb-200-distilled-600M-ctranslate2"
             tokenizer_repo = "facebook/nllb-200-distilled-600M"
 
-        print(f"[Translator] Downloading/Loading {repo} (CTranslate2) on {self.device}...")
+        logger.info("Downloading/Loading %s (CTranslate2) on %s...", repo, self.device)
         try:
             # Download/Cache model from HF Hub
             model_path = snapshot_download(repo_id=repo)
-            print(f"[Translator] Model cached at: {model_path}")
+            logger.info("Model cached at: %s", model_path)
 
             # Load the converter model
             self.model = ctranslate2.Translator(
@@ -108,35 +111,35 @@ class Translator:
                 tokenizer_repo, src_lang=_NLLB_LANG_MAP[self.source_lang]
             )
             self._ct2_target_lang = _NLLB_LANG_MAP[self.target_lang]
-            print(f"[Translator] {repo} loaded.")
+            logger.info("%s loaded.", repo)
         except Exception as e:
-            print(f"[Translator] ERROR loading {repo}: {e}")
-            print(f"[Translator] Falling back to standard opus-mt...")
+            logger.error("ERROR loading %s: %s", repo, e)
+            logger.warning("Falling back to standard opus-mt...")
             self.backend = "opus-mt"
             self._load_marian()
 
     def _load_marian(self):
         model_name = f"Helsinki-NLP/opus-mt-{self.source_lang}-{self.target_lang}"
-        print(f"[Translator] Loading {model_name} on {self.device}...")
+        logger.info("Loading %s on %s...", model_name, self.device)
         try:
             self.tokenizer = MarianTokenizer.from_pretrained(model_name)
             self.model = MarianMTModel.from_pretrained(model_name).to(self.device)
             self.model.eval()
-            print(f"[Translator] {model_name} loaded.")
+            logger.info("%s loaded.", model_name)
         except Exception as e:
-            print(f"[Translator] ERROR loading {model_name}: {e}")
+            logger.error("ERROR loading %s: %s", model_name, e)
 
     def _load_marian_big(self):
         model_name = f"Helsinki-NLP/opus-mt-tc-big-{self.source_lang}-{self.target_lang}"
-        print(f"[Translator] Loading {model_name} on {self.device}...")
+        logger.info("Loading %s on %s...", model_name, self.device)
         try:
             self.tokenizer = MarianTokenizer.from_pretrained(model_name)
             self.model = MarianMTModel.from_pretrained(model_name).to(self.device)
             self.model.eval()
-            print(f"[Translator] {model_name} loaded.")
+            logger.info("%s loaded.", model_name)
         except Exception as e:
-            print(f"[Translator] ERROR loading {model_name}: {e}")
-            print(f"[Translator] Falling back to standard opus-mt...")
+            logger.error("ERROR loading %s: %s", model_name, e)
+            logger.warning("Falling back to standard opus-mt...")
             self._load_marian()
 
     def _load_nllb(self, variant):
@@ -145,7 +148,7 @@ class Translator:
         else:
             model_name = "facebook/nllb-200-distilled-600M"
 
-        print(f"[Translator] Loading {model_name} on {self.device}...")
+        logger.info("Loading %s on %s...", model_name, self.device)
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_name, src_lang=_NLLB_LANG_MAP[self.source_lang]
@@ -156,10 +159,10 @@ class Translator:
             self._forced_bos_id = self.tokenizer.convert_tokens_to_ids(
                 _NLLB_LANG_MAP[self.target_lang]
             )
-            print(f"[Translator] {model_name} loaded.")
+            logger.info("%s loaded.", model_name)
         except Exception as e:
-            print(f"[Translator] ERROR loading {model_name}: {e}")
-            print(f"[Translator] Falling back to opus-mt...")
+            logger.error("ERROR loading %s: %s", model_name, e)
+            logger.warning("Falling back to opus-mt...")
             self.backend = "opus-mt"
             self._load_marian()
 
@@ -199,7 +202,7 @@ class Translator:
             if self._forced_bos_id is not None:
                 gen_kwargs["forced_bos_token_id"] = self._forced_bos_id
 
-            with torch.no_grad():
+            with torch.inference_mode():
                 generated = self.model.generate(**batch, **gen_kwargs)
 
             result = self.tokenizer.batch_decode(
@@ -207,5 +210,5 @@ class Translator:
             )[0]
             return result
         except Exception as e:
-            print(f"[Translator] Translation error: {e}")
+            logger.error("Translation error: %s", e)
             return ""

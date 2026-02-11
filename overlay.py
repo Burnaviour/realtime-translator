@@ -18,6 +18,9 @@ import queue
 from settings import Settings
 from settings_ui import SettingsWindow
 from locales import t, set_language
+from logger_config import get_logger
+
+logger = get_logger("Overlay")
 
 # Resize handle size in pixels
 _GRIP = 8
@@ -43,6 +46,10 @@ class OverlayWindow:
         self._resize_edge = None
         self._on_close_callback = None   # set by main app for clean exit
         self._on_restart_callback = None  # set by main app for restart
+        
+        # Store previous translations
+        self._prev_game_text = ""
+        self._prev_mic_text = ""
 
         # Settings window (lazy)
         self._settings_win = SettingsWindow(
@@ -169,7 +176,20 @@ class OverlayWindow:
 
         wrap = max(300, w - 80)
 
-        # ── Game text row ───────────────────────────────────────────
+        # ── Game text rows ───────────────────────────────────────
+        # Previous game text (dimmed)
+        prev_game_row = tk.Frame(self.container, bg=bg)
+        prev_game_row.pack(fill="x", pady=(0, 1))
+        
+        self.label_prev_game = tk.Label(
+            prev_game_row, text="",
+            font=(font, max(8, c.get("game_font_size") - 2)),
+            fg=self._dim_color(c.get("game_text_color")), bg=bg,
+            anchor="w", wraplength=wrap, justify="left",
+        )
+        self.label_prev_game.pack(side="left", fill="x", expand=True, padx=(20, 0))
+        
+        # Current game text
         game_row = tk.Frame(self.container, bg=bg)
         game_row.pack(fill="x", pady=(0, 2))
 
@@ -191,9 +211,22 @@ class OverlayWindow:
         self._sep = tk.Frame(self.container, bg=c.get("accent_color"), height=1)
         self._sep.pack(fill="x", pady=2)
 
-        # ── Mic text row ───────────────────────────────────────────
+        # ── Mic text rows ───────────────────────────────────────
+        # Previous mic text (dimmed)
+        prev_mic_row = tk.Frame(self.container, bg=bg)
+        prev_mic_row.pack(fill="x", pady=(2, 1))
+        
+        self.label_prev_mic = tk.Label(
+            prev_mic_row, text="",
+            font=(font, max(8, c.get("mic_font_size") - 2)),
+            fg=self._dim_color(c.get("mic_text_color")), bg=bg,
+            anchor="w", wraplength=wrap, justify="left",
+        )
+        self.label_prev_mic.pack(side="left", fill="x", expand=True, padx=(20, 0))
+        
+        # Current mic text
         mic_row = tk.Frame(self.container, bg=bg)
-        mic_row.pack(fill="x", pady=(2, 0))
+        mic_row.pack(fill="x", pady=(0, 0))
 
         self._mic_icon = tk.Label(
             mic_row, text="\u25c0", font=(font, 9),
@@ -291,8 +324,10 @@ class OverlayWindow:
 
         self.label_game.config(fg=gc, bg=bg, font=(font, gfz, "bold"), wraplength=wrap)
         self._game_icon.config(fg=gc, bg=bg)
+        self.label_prev_game.config(fg=self._dim_color(gc), bg=bg, font=(font, max(8, gfz - 2)), wraplength=wrap)
         self.label_mic.config(fg=mc, bg=bg, font=(font, mfz), wraplength=wrap)
         self._mic_icon.config(fg=mc, bg=bg)
+        self.label_prev_mic.config(fg=self._dim_color(mc), bg=bg, font=(font, max(8, mfz - 2)), wraplength=wrap)
         self._sep.config(bg=ac)
         self.label_status.config(fg=sc_, bg=bg)
         self.btn_settings.config(fg=sc_, bg=bg)
@@ -441,9 +476,9 @@ class OverlayWindow:
             keyboard.add_hotkey("F9", lambda: self.root.after(0, self._toggle_visible))
             keyboard.add_hotkey("F10", lambda: self.root.after(0, self._open_settings))
         except ImportError:
-            print("[Overlay] 'keyboard' package missing – hotkeys disabled.")
+            logger.warning("'keyboard' package missing – hotkeys disabled.")
         except Exception as e:
-            print(f"[Overlay] Hotkey error: {e}")
+            logger.error("Hotkey error: %s", e)
 
     def _toggle_lock(self):
         self.locked = not self.locked
@@ -500,6 +535,17 @@ class OverlayWindow:
             while True:
                 msg_type, text = self.queue.get_nowait()
                 if msg_type == "game":
+                    # Move current to previous
+                    if self._prev_game_text:
+                        self.label_prev_game.config(
+                            text=self._prev_game_text,
+                            fg=self._dim_color(self.cfg.get("game_text_color")),
+                            font=(self.cfg.get("font_family"),
+                                  max(8, self.cfg.get("game_font_size") - 2)),
+                        )
+                    self._prev_game_text = text
+                    
+                    # Update current
                     self.label_game.config(
                         text=text,
                         fg=self.cfg.get("game_text_color"),
@@ -516,6 +562,17 @@ class OverlayWindow:
                               self.cfg.get("game_font_size"), "italic"),
                     )
                 elif msg_type == "mic":
+                    # Move current to previous
+                    if self._prev_mic_text:
+                        self.label_prev_mic.config(
+                            text=self._prev_mic_text,
+                            fg=self._dim_color(self.cfg.get("mic_text_color")),
+                            font=(self.cfg.get("font_family"),
+                                  max(8, self.cfg.get("mic_font_size") - 2)),
+                        )
+                    self._prev_mic_text = text
+                    
+                    # Update current
                     self.label_mic.config(
                         text=text,
                         fg=self.cfg.get("mic_text_color"),

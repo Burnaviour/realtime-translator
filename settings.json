@@ -1,8 +1,8 @@
 {
-  "overlay_width": 897,
-  "overlay_height": 169,
-  "overlay_x": 415,
-  "overlay_y": 357,
+  "overlay_width": 771,
+  "overlay_height": 166,
+  "overlay_x": 310,
+  "overlay_y": 768,
   "overlay_opacity": 0.7,
   "bg_color": "#0d1117",
   "game_text_color": "#58d68d",
@@ -22,5 +22,6 @@
   "speech_filter_enabled": true,
   "game_noise_gate": 0.012,
   "clean_audio_mode": true,
+  "transliterate_mic": true,
   "first_run_shown": true
 }

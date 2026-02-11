@@ -195,6 +195,8 @@ class SettingsWindow:
                  font=("Segoe UI", 8), fg="#7b8794", bg=BG, anchor="w").grid(
             row=row, column=0, columnspan=3, sticky="w", padx=16, pady=(0, 4))
         row += 1
+        self._vars.append(checkbox_row(t("lbl_transliterate_mic"),
+                                       "transliterate_mic"))
 
         section(t("sec_overlay_size"))
         self._vars.append(slider_row(t("lbl_width"), "overlay_width", 400, 1600))

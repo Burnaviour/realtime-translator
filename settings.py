@@ -5,6 +5,9 @@ Saves to / loads from  settings.json  next to the script.
 
 import json
 import os
+from logger_config import get_logger
+
+logger = get_logger("Settings")
 
 _SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
 
@@ -50,6 +53,10 @@ DEFAULTS = {
     "clean_audio_mode": False,       # Optimize for clear voice chat (disable band-pass, gentle VAD)
                                      # Enable when friend uses good mic & game sounds are low
 
+    # Transliteration
+    "transliterate_mic": True,       # Show mic translations as Latin-script Russian
+                                     # e.g. "ya idu" instead of "я иду"
+
     # First-run
     "first_run_shown": False,
 }
@@ -83,19 +90,19 @@ class Settings:
                 for k, v in saved.items():
                     if k in DEFAULTS:
                         self._data[k] = v
-                print(f"[Settings] Loaded from {_SETTINGS_FILE}")
+                logger.info("Loaded from %s", _SETTINGS_FILE)
             except Exception as e:
-                print(f"[Settings] Could not load settings: {e}  (using defaults)")
+                logger.warning("Could not load settings: %s  (using defaults)", e)
         else:
-            print("[Settings] No settings file found — using defaults.")
+            logger.info("No settings file found — using defaults.")
 
     def save(self):
         try:
             with open(_SETTINGS_FILE, "w", encoding="utf-8") as f:
                 json.dump(self._data, f, indent=2, ensure_ascii=False)
-            print(f"[Settings] Saved to {_SETTINGS_FILE}")
+            logger.info("Saved to %s", _SETTINGS_FILE)
         except Exception as e:
-            print(f"[Settings] Could not save: {e}")
+            logger.error("Could not save: %s", e)
 
     def reset(self):
         self._data = dict(DEFAULTS)

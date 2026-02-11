@@ -2,6 +2,7 @@ import threading
 import time
 import queue
 import numpy as np
+from collections import Counter
 
 from audio_capture import (
     SystemAudioLoopback, MicAudioCapture,
@@ -10,8 +11,12 @@ from audio_capture import (
 from transcriber import Transcriber
 from translator import Translator
 from overlay import OverlayWindow
-from glossary import apply_gaming_glossary
+from glossary import apply_gaming_glossary, log_translation
 from locales import t
+from transliterate import transliterate_russian, has_cyrillic
+from logger_config import get_logger
+
+logger = get_logger("App")
 
 SAMPLE_RATE = 16000
 
@@ -53,7 +58,7 @@ def _is_repetitive_translation(text: str) -> bool:
         return False
 
     # Count word frequency (strip common punctuation)
-    from collections import Counter
+
     cleaned_words = [w.strip('.,!?;:"\'-') for w in words]
     word_counts = Counter(cleaned_words)
     # If ANY single word appears more than 6 times, it's likely spam
@@ -95,7 +100,6 @@ def is_hallucination(text: str) -> bool:
         # Ignore spaces for this check
         compact = "".join(ch for ch in stripped if not ch.isspace())
         if compact:
-            from collections import Counter
             counts = Counter(compact)
             most_common = counts.most_common(1)[0][1]
             # More aggressive: 75% same character (was 85%)
@@ -148,6 +152,15 @@ class TranslationApp:
     """
 
     def __init__(self):
+        # ── GPU memory optimization ─────────────────────────────────
+        import torch
+        if torch.cuda.is_available():
+            # Free fragmented GPU memory before loading models
+            torch.cuda.empty_cache()
+            # Use memory-efficient CUDA allocator to reduce fragmentation
+            import os
+            os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
         # Overlay first (reads settings)
         self.overlay = OverlayWindow()
         src = self.overlay.cfg.get("source_language")  # "english" or "russian"
@@ -167,14 +180,12 @@ class TranslationApp:
             game_lang_hint = "ru"
             mic_lang_hint = "en"
 
-        print("=" * 60)
-        print(f"  {t('console_title')}")
-        print(f"  {t('console_my_lang')}: {src.upper()}")
-        print(f"  {game_label}  |  {mic_label}")
-        print("=" * 60)
-        print()
-        print(t("console_loading"))
-        print()
+        logger.info("=" * 60)
+        logger.info("  %s", t('console_title'))
+        logger.info("  %s: %s", t('console_my_lang'), src.upper())
+        logger.info("  %s  |  %s", game_label, mic_label)
+        logger.info("=" * 60)
+        logger.info(t("console_loading"))
 
         # Audio sources
         clean_mode = self.overlay.cfg.get("clean_audio_mode")
@@ -187,7 +198,7 @@ class TranslationApp:
 
         # Speech recognition (model from settings)
         whisper_model = self.overlay.cfg.get("whisper_model")
-        print(f"{t('console_whisper_model')}: {whisper_model}")
+        logger.info("%s: %s", t('console_whisper_model'), whisper_model)
         self.transcriber = Transcriber(
             model_size=whisper_model,
             clean_audio_mode=clean_mode,
@@ -195,7 +206,7 @@ class TranslationApp:
 
         # Translation models (direction based on source_language setting)
         trans_model = self.overlay.cfg.get("translation_model")
-        print(f"[Init] Translation model: {trans_model}")
+        logger.info("Translation model: %s", trans_model)
         self.translator_game = Translator(
             source_lang=game_src, target_lang=game_tgt,
             translation_model=trans_model,
@@ -219,10 +230,8 @@ class TranslationApp:
 
         self.running = True
 
-        print()
-        print(t("console_ready"))
-        print(t("console_keys"))
-        print()
+        logger.info(t("console_ready"))
+        logger.info(t("console_keys"))
 
     def _find_silence_split(self, buffer, threshold, chunk_size=1024):
         """
@@ -302,8 +311,8 @@ class TranslationApp:
                             buffer, SAMPLE_RATE, rms_threshold,
                             bandpass_applied=False,
                         ):
-                            print(f"[{label}] Skipped — audio doesn't look like speech "
-                                  f"(RMS={rms:.4f})")
+                            logger.debug("[%s] Skipped — audio doesn't look like speech (RMS=%.4f)",
+                                         label, rms)
                             buffer = np.array([], dtype=np.float32)
                             consecutive_silent = 0
                             last_preview_time = time.time()
@@ -358,8 +367,7 @@ class TranslationApp:
                         buffer, SAMPLE_RATE, rms_threshold,
                         bandpass_applied=False,
                     ):
-                        print(f"[{label}] Skipped — not speech "
-                              f"(RMS={rms:.4f})")
+                        logger.debug("[%s] Skipped — not speech (RMS=%.4f)", label, rms)
                         buffer = np.array([], dtype=np.float32)
                         consecutive_silent = 0
                         last_preview_time = time.time()
@@ -415,6 +423,11 @@ class TranslationApp:
             if text and not is_hallucination(text):
                 translated = translator.translate(text)
                 if translated and translated.strip():
+                    # Transliterate Cyrillic → Latin for mic output
+                    if (not self._is_game_source(label)
+                            and self._settings.get("transliterate_mic")
+                            and has_cyrillic(translated)):
+                        translated = transliterate_russian(translated)
                     preview_func(translated)
         except Exception:
             pass
@@ -436,14 +449,14 @@ class TranslationApp:
                 )
                 
                 if detected_lang != language and prob > threshold:
-                    print(f"[{label}] Skipped — detected '{detected_lang}' "
-                          f"(prob {prob:.0%}), expected '{language}'")
+                    logger.debug("[%s] Skipped — detected '%s' (prob %.0f%%), expected '%s'",
+                                 label, detected_lang, prob * 100, language)
                     return
                 elif detected_lang != language:
                     # Low confidence mismatch — re-transcribe with forced language
                     # since the detection is unreliable
-                    print(f"[{label}] Low-confidence '{detected_lang}' ({prob:.0%}) "
-                          f"— forcing '{language}' transcription")
+                    logger.debug("[%s] Low-confidence '%s' (%.0f%%) — forcing '%s' transcription",
+                                 label, detected_lang, prob * 100, language)
                     text = self.transcriber.transcribe_text(audio, language=language)
             else:
                 text = self.transcriber.transcribe_text(audio, language=language)
@@ -458,20 +471,36 @@ class TranslationApp:
             if translated and translated.strip():
                 # Post-translation filter: catch garbage/repeated output
                 if is_hallucination(translated) or _is_repetitive_translation(translated):
-                    print(f'[{label}] Blocked repetitive/garbage translation: "{text}"')
+                    logger.debug('[%s] Blocked repetitive/garbage translation: "%s"', label, text)
                     return
                 
                 # Apply Gaming Glossary / Context Fixes
+                raw_translation = translated
                 translated = apply_gaming_glossary(translated)
                 
+                # Log translation for glossary review (only if changed)
+                if raw_translation != translated:
+                    # Determine source and target languages based on translator
+                    src_lang = translator.source_lang
+                    tgt_lang = translator.target_lang
+                    log_translation(text, raw_translation, translated, src_lang, tgt_lang)
+                
+                # Transliterate Cyrillic → Latin for mic output
+                if (not self._is_game_source(label)
+                        and self._settings.get("transliterate_mic")
+                        and has_cyrillic(translated)):
+                    translated = transliterate_russian(translated)
+
                 latency_transcribe = (t1 - t0) * 1000
                 latency_translate = (t2 - t1) * 1000
                 total_latency = (t2 - t0) * 1000
                 
-                print(f'[{label}] "{text}" -> "{translated}" [Tr: {latency_transcribe:.0f}ms | Tl: {latency_translate:.0f}ms | Total: {total_latency:.0f}ms]')
+                logger.info('[%s] "%s" -> "%s" [Tr: %.0fms | Tl: %.0fms | Total: %.0fms]',
+                            label, text, translated,
+                            latency_transcribe, latency_translate, total_latency)
                 update_func(translated)
         except Exception as e:
-            print(f"[{label}] Processing error: {e}")
+            logger.error("[%s] Processing error: %s", label, e)
 
     def run(self):
         """Start all components and run the app."""
@@ -504,15 +533,14 @@ class TranslationApp:
         game_thread.start()
         mic_thread.start()
 
-        print(t("console_running"))
-        print()
+        logger.info(t("console_running"))
 
         # Ctrl+C handler — tkinter on Windows doesn't propagate KeyboardInterrupt
         # so we poll for it via a periodic callback
         import signal
 
         def _signal_handler(sig, frame):
-            print(f"\n{t('console_ctrlc')}")
+            logger.info(t('console_ctrlc'))
             self._shutdown()
 
         signal.signal(signal.SIGINT, _signal_handler)
@@ -539,7 +567,7 @@ class TranslationApp:
         if not self.running:
             return  # Already shut down
         self.running = False
-        print(f"\n{t('console_shutdown')}")
+        logger.info(t('console_shutdown'))
         try:
             self.system_audio.stop()
         except Exception:
@@ -552,7 +580,7 @@ class TranslationApp:
             self.overlay.stop()
         except Exception:
             pass
-        print(t("console_shutdown_done"))
+        logger.info(t("console_shutdown_done"))
         # Force-exit to avoid Fortran / native-library cleanup errors
         import os
         os._exit(0)
@@ -562,7 +590,7 @@ class TranslationApp:
         if not self.running:
             return
         self.running = False
-        print(f"\n{t('console_restarting')}")
+        logger.info(t('console_restarting'))
         try:
             self.overlay.stop()
         except Exception:
@@ -586,9 +614,6 @@ if __name__ == "__main__":
         app.run()
     except Exception as e:
         import traceback
-        print("\n" + "=" * 60)
-        print(f"  {t('console_fatal')}")
-        print("=" * 60)
+        logger.critical(t('console_fatal'))
         traceback.print_exc()
-        print("\n" + "=" * 60)
         input(t("console_press_enter"))

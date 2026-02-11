@@ -1,5 +1,8 @@
 import torch
 from faster_whisper import WhisperModel
+from logger_config import get_logger
+
+logger = get_logger("Whisper")
 
 
 class Transcriber:
@@ -10,20 +13,20 @@ class Transcriber:
         self.compute_type = "float16" if self.device == "cuda" else "int8"
         self.clean_audio_mode = clean_audio_mode
 
-        print(f"[Whisper] Loading '{model_size}' on {self.device} ({self.compute_type})...")
+        logger.info("Loading '%s' on %s (%s)...", model_size, self.device, self.compute_type)
         try:
             self.model = WhisperModel(
                 model_size, device=self.device, compute_type=self.compute_type
             )
-            print("[Whisper] Model loaded successfully.")
+            logger.info("Model loaded successfully.")
         except Exception as e:
-            print(f"[Whisper] ERROR loading model: {e}")
-            print("[Whisper] Falling back to CPU with int8...")
+            logger.error("ERROR loading model: %s", e)
+            logger.warning("Falling back to CPU with int8...")
             try:
                 self.model = WhisperModel(model_size, device="cpu", compute_type="int8")
-                print("[Whisper] CPU fallback loaded.")
+                logger.info("CPU fallback loaded.")
             except Exception as e2:
-                print(f"[Whisper] FATAL: Could not load model: {e2}")
+                logger.critical("FATAL: Could not load model: %s", e2)
                 self.model = None
 
     def transcribe_text(self, audio_data, language=None):
@@ -45,8 +48,8 @@ class Transcriber:
             # Lower temp + no cross-segment conditioning reduces hallucinations
             # on noisy / gaming audio.
             kwargs = {
-                "beam_size": 5,
-                "best_of": 5,
+                "beam_size": 3,
+                "best_of": 1,
                 "patience": 1.0,
                 "temperature": [0.0, 0.2],
                 "compression_ratio_threshold": 2.0,
@@ -82,7 +85,7 @@ class Transcriber:
             text = " ".join(seg.text for seg in segments).strip()
             return text
         except Exception as e:
-            print(f"[Whisper] Transcription error: {e}")
+            logger.error("Transcription error: %s", e)
             return ""
 
     def transcribe_with_lang(self, audio_data, language=None):
@@ -103,8 +106,8 @@ class Transcriber:
 
         try:
             kwargs = {
-                "beam_size": 5,
-                "best_of": 5,
+                "beam_size": 3,
+                "best_of": 1,
                 "patience": 1.0,
                 "temperature": [0.0, 0.2],
                 "compression_ratio_threshold": 2.0,
@@ -136,5 +139,5 @@ class Transcriber:
             text = " ".join(seg.text for seg in segments).strip()
             return text, info.language, info.language_probability
         except Exception as e:
-            print(f"[Whisper] Transcription error: {e}")
+            logger.error("Transcription error: %s", e)
             return "", "", 0.0

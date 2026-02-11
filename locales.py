@@ -169,6 +169,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "  opus-mt=fast  opus-mt-big=better  nllb-600M=best  nllb-1.3B=highest",
         "ru": "  opus-mt=быстр  opus-mt-big=лучше  nllb-600M=лучшая  nllb-1.3B=макс",
     },
+    "lbl_transliterate_mic": {
+        "en": "Transliterate mic (show Latin-script Russian: ya idu)",
+        "ru": "Транслитерация микрофона (латиницей: ya idu)",
+    },
     "lbl_width": {
         "en": "Width",
         "ru": "Ширина",
