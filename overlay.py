@@ -47,9 +47,11 @@ class OverlayWindow:
         self._on_close_callback = None   # set by main app for clean exit
         self._on_restart_callback = None  # set by main app for restart
         
-        # Store previous translations
-        self._prev_game_text = ""
-        self._prev_mic_text = ""
+        # Store final translations (not previews) for history tracking
+        self._current_game_final = ""
+        self._prev_game_final = ""
+        self._current_mic_final = ""
+        self._prev_mic_final = ""
 
         # Settings window (lazy)
         self._settings_win = SettingsWindow(
@@ -534,45 +536,75 @@ class OverlayWindow:
         try:
             while True:
                 msg_type, text = self.queue.get_nowait()
+                logger.debug("Processing queue message: type=%s, text=%s", msg_type, text[:50] if text else "(empty)")
                 if msg_type == "game":
-                    # Move current to previous
-                    if self._prev_game_text:
+                    # Final translation arrived - update history
+                    # Move current final to previous
+                    if self._current_game_final:
+                        self._prev_game_final = self._current_game_final
                         self.label_prev_game.config(
-                            text=self._prev_game_text,
+                            text=self._prev_game_final,
                             fg=self._dim_color(self.cfg.get("game_text_color")),
                             font=(self.cfg.get("font_family"),
                                   max(8, self.cfg.get("game_font_size") - 2)),
                         )
-                    self._prev_game_text = text
+                    # Store new final text
+                    self._current_game_final = text
                     
-                    # Update current
+                    # Update current display
                     self.label_game.config(
                         text=text,
                         fg=self.cfg.get("game_text_color"),
                         font=(self.cfg.get("font_family"),
                               self.cfg.get("game_font_size"), "bold"),
                     )
+                    logger.info("Updated game overlay text: %s", text[:50])
                 elif msg_type == "game_preview":
-                    # Streaming preview — dimmed italic
-                    base_color = self.cfg.get("game_text_color")
-                    self.label_game.config(
-                        text=f"\u23f3 {text}",
-                        fg=self._dim_color(base_color),
-                        font=(self.cfg.get("font_family"),
-                              self.cfg.get("game_font_size"), "italic"),
-                    )
+                    # Streaming preview — dimmed italic (doesn't affect history)
+                    if text and text.strip():
+                        # Show preview - don't touch final text tracking
+                        base_color = self.cfg.get("game_text_color")
+                        self.label_game.config(
+                            text=f"\u23f3 {text}",
+                            fg=self._dim_color(base_color),
+                            font=(self.cfg.get("font_family"),
+                                  self.cfg.get("game_font_size"), "italic"),
+                        )
+                    elif text == "":
+                        # Explicit clear - restore last final text if we have one
+                        if self._current_game_final:
+                            # Restore the last final text instead of clearing
+                            self.label_game.config(
+                                text=self._current_game_final,
+                                fg=self.cfg.get("game_text_color"),
+                                font=(self.cfg.get("font_family"),
+                                      self.cfg.get("game_font_size"), "bold"),
+                            )
+                        else:
+                            # No final text yet, just clear
+                            self.label_game.config(
+                                text="",
+                                fg=self.cfg.get("game_text_color"),
+                                font=(self.cfg.get("font_family"),
+                                      self.cfg.get("game_font_size"), "bold"),
+                            )
                 elif msg_type == "mic":
-                    # Move current to previous
-                    if self._prev_mic_text:
+                    if not self.cfg.get("show_mic_overlay"):
+                        continue
+                    # Final translation arrived - update history
+                    # Move current final to previous
+                    if self._current_mic_final:
+                        self._prev_mic_final = self._current_mic_final
                         self.label_prev_mic.config(
-                            text=self._prev_mic_text,
+                            text=self._prev_mic_final,
                             fg=self._dim_color(self.cfg.get("mic_text_color")),
                             font=(self.cfg.get("font_family"),
                                   max(8, self.cfg.get("mic_font_size") - 2)),
                         )
-                    self._prev_mic_text = text
+                    # Store new final text
+                    self._current_mic_final = text
                     
-                    # Update current
+                    # Update current display
                     self.label_mic.config(
                         text=text,
                         fg=self.cfg.get("mic_text_color"),
@@ -580,17 +612,41 @@ class OverlayWindow:
                               self.cfg.get("mic_font_size")),
                     )
                 elif msg_type == "mic_preview":
-                    base_color = self.cfg.get("mic_text_color")
-                    self.label_mic.config(
-                        text=f"\u23f3 {text}",
-                        fg=self._dim_color(base_color),
-                        font=(self.cfg.get("font_family"),
-                              self.cfg.get("mic_font_size"), "italic"),
-                    )
+                    if not self.cfg.get("show_mic_overlay"):
+                        continue
+                    if text and text.strip():
+                        # Show preview - don't touch final text tracking
+                        base_color = self.cfg.get("mic_text_color")
+                        self.label_mic.config(
+                            text=f"\u23f3 {text}",
+                            fg=self._dim_color(base_color),
+                            font=(self.cfg.get("font_family"),
+                                  self.cfg.get("mic_font_size"), "italic"),
+                        )
+                    elif text == "":
+                        # Explicit clear - restore last final text if we have one
+                        if self._current_mic_final:
+                            # Restore the last final text instead of clearing
+                            self.label_mic.config(
+                                text=self._current_mic_final,
+                                fg=self.cfg.get("mic_text_color"),
+                                font=(self.cfg.get("font_family"),
+                                      self.cfg.get("mic_font_size")),
+                            )
+                        else:
+                            # No final text yet, just clear
+                            self.label_mic.config(
+                                text="",
+                                fg=self.cfg.get("mic_text_color"),
+                                font=(self.cfg.get("font_family"),
+                                      self.cfg.get("mic_font_size")),
+                            )
                 elif msg_type == "status":
                     self.label_status.config(text=text)
         except queue.Empty:
             pass
+        except Exception as e:
+            logger.error("Overlay queue error: %s", e)
         if self.root.winfo_exists():
             self.root.after(80, self._process_queue)
 
@@ -609,10 +665,12 @@ class OverlayWindow:
 
     def update_game_text(self, text):
         """Thread-safe: final translated game text."""
+        logger.info("update_game_text called with: %s", text[:50] if text else "(empty)")
         self.queue.put(("game", text))
 
     def update_game_preview(self, text):
         """Thread-safe: streaming preview (partial transcription, dimmed)."""
+        logger.debug("update_game_preview called with: %s", text[:50] if text else "(empty)")
         self.queue.put(("game_preview", text))
 
     def update_mic_text(self, text):

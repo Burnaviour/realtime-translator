@@ -9,5 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
-# Translation logs (user data)
+# Log files
+*.log
+*.log.*
+logs/
 translation_logs/

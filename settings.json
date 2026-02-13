@@ -1,9 +1,9 @@
 {
-  "overlay_width": 771,
-  "overlay_height": 166,
-  "overlay_x": 310,
-  "overlay_y": 768,
-  "overlay_opacity": 0.7,
+  "overlay_width": 945,
+  "overlay_height": 180,
+  "overlay_x": 882,
+  "overlay_y": 569,
+  "overlay_opacity": 0.76,
   "bg_color": "#0d1117",
   "game_text_color": "#58d68d",
   "mic_text_color": "#5dade2",
@@ -13,7 +13,7 @@
   "game_font_size": 14,
   "mic_font_size": 12,
   "streaming_enabled": true,
-  "streaming_interval_ms": 600,
+  "streaming_interval_ms": 1000,
   "whisper_model": "medium",
   "translation_model": "nllb-600M-ct2",
   "app_language": "english",
@@ -22,6 +22,7 @@
   "speech_filter_enabled": true,
   "game_noise_gate": 0.012,
   "clean_audio_mode": true,
+  "show_mic_overlay": true,
   "transliterate_mic": true,
   "first_run_shown": true
 }

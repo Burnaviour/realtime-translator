@@ -36,7 +36,7 @@ DEFAULTS = {
     "streaming_interval_ms": 1200,   # How often to show preview text
 
     # Whisper model
-    "whisper_model": "medium",       # tiny, base, small, medium, large-v2
+    "whisper_model": "medium",       # tiny, base, small, medium, large-v2, large-v3
 
     # Translation model
     "translation_model": "nllb-600M", # opus-mt, opus-mt-big, nllb-600M, nllb-1.3B
@@ -48,10 +48,14 @@ DEFAULTS = {
 
     # Audio filtering
     "speech_filter_enabled": True,   # Band-pass filter (300-3000 Hz) on game audio
-    "game_noise_gate": 0.012,        # RMS threshold for game audio (higher = reject more noise)
+    "game_noise_gate": 0.006,        # RMS threshold for game audio (higher = reject more noise)
                                      # 0.005 = very sensitive, 0.02 = strict, 0.04 = very strict
+                                     # Lowered to 0.006 to better capture voice chat
     "clean_audio_mode": False,       # Optimize for clear voice chat (disable band-pass, gentle VAD)
                                      # Enable when friend uses good mic & game sounds are low
+
+    # Mic overlay
+    "show_mic_overlay": True,        # Show mic (your voice) subtitles on overlay
 
     # Transliteration
     "transliterate_mic": True,       # Show mic translations as Latin-script Russian

@@ -135,6 +135,7 @@ class SystemAudioLoopback(AudioCapture):
             else:
                 logger.info("Speech band-pass filter: DISABLED")
 
+            chunk_count = 0
             with loopback.recorder(samplerate=self.sample_rate) as recorder:
                 while self.running:
                     data = recorder.record(numframes=self.block_size)
@@ -147,6 +148,12 @@ class SystemAudioLoopback(AudioCapture):
                     # Apply speech band-pass filter to strip game sounds
                     if self._sos is not None:
                         data = speech_bandpass(data, self._sos)
+
+                    # Log RMS every 100 chunks for diagnostics
+                    chunk_count += 1
+                    if chunk_count % 100 == 0:
+                        rms = compute_rms(data)
+                        logger.debug("Game audio capture: RMS=%.4f", rms)
 
                     if not self.audio_queue.full():
                         self.audio_queue.put(data)

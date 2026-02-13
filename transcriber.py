@@ -10,6 +10,7 @@ class Transcriber:
 
     def __init__(self, model_size="small", clean_audio_mode=False):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        # Use float16 for GPU (faster, accurate), int8 for CPU (slower, smaller)
         self.compute_type = "float16" if self.device == "cuda" else "int8"
         self.clean_audio_mode = clean_audio_mode
 

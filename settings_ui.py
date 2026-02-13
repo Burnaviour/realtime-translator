@@ -181,7 +181,7 @@ class SettingsWindow:
 
         section(t("sec_whisper"))
         self._vars.append(dropdown_row(t("lbl_model_size"), "whisper_model",
-                                       ["tiny", "base", "small", "medium", "large-v2"]))
+                                       ["tiny", "base", "small", "medium", "large-v2", "large-v3"]))
         tk.Label(frame, text=t("lbl_model_hint"),
                  font=("Segoe UI", 8), fg="#7b8794", bg=BG, anchor="w").grid(
             row=row, column=0, columnspan=3, sticky="w", padx=16, pady=(0, 4))
@@ -195,6 +195,8 @@ class SettingsWindow:
                  font=("Segoe UI", 8), fg="#7b8794", bg=BG, anchor="w").grid(
             row=row, column=0, columnspan=3, sticky="w", padx=16, pady=(0, 4))
         row += 1
+        self._vars.append(checkbox_row(t("lbl_show_mic_overlay"),
+                                       "show_mic_overlay"))
         self._vars.append(checkbox_row(t("lbl_transliterate_mic"),
                                        "transliterate_mic"))
 

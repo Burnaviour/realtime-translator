@@ -11,7 +11,7 @@ from audio_capture import (
 from transcriber import Transcriber
 from translator import Translator
 from overlay import OverlayWindow
-from glossary import apply_gaming_glossary, log_translation
+from glossary import apply_gaming_glossary, apply_name_corrections, log_translation
 from locales import t
 from transliterate import transliterate_russian, has_cyrillic
 from logger_config import get_logger
@@ -280,12 +280,13 @@ class TranslationApp:
         if is_game:
             noise_gate = self._settings.get("game_noise_gate")
             if bandpass_on:
-                # Band-pass reduces overall RMS — use gentler thresholds
-                silence_threshold = max(0.003, noise_gate * 0.5)
-                rms_threshold = max(0.002, noise_gate * 0.4)
+                # Band-pass reduces overall RMS — use MUCH gentler thresholds
+                silence_threshold = max(0.001, noise_gate * 0.3)
+                rms_threshold = max(0.0008, noise_gate * 0.2)
             else:
-                silence_threshold = max(0.005, noise_gate)
-                rms_threshold = max(0.004, noise_gate * 0.8)
+                # Significantly lower thresholds for game voice chat
+                silence_threshold = max(0.002, noise_gate * 0.5)
+                rms_threshold = max(0.0015, noise_gate * 0.4)
         else:
             silence_threshold = 0.005
             rms_threshold = 0.003
@@ -298,28 +299,87 @@ class TranslationApp:
         preview_min_samples = int(SAMPLE_RATE * 1.0)  # Need >=1s for preview
         # Limit concurrent preview threads to reduce CPU load
         preview_in_progress = threading.Event()
+        # Track if a preview is currently shown (needs to be cleared)
+        preview_shown = False
+        # Cooldown: after a final translation, suppress previews for N seconds
+        # so the user can actually READ the final text before it gets overwritten
+        last_final_time = 0.0
+        FINAL_DISPLAY_COOLDOWN = 3.0  # seconds to keep final text visible
 
         while self.running:
             try:
                 chunk = audio_source.audio_queue.get(timeout=0.3)
             except queue.Empty:
+                # Timeout - no more audio coming. Process any remaining buffer (last sentence)
                 if len(buffer) >= min_samples:
-                    rms = compute_rms(buffer)
-                    if rms > rms_threshold:
-                        # For game audio WITHOUT bandpass, check speech characteristics
-                        if is_game and not bandpass_on and not is_likely_speech(
-                            buffer, SAMPLE_RATE, rms_threshold,
-                            bandpass_applied=False,
-                        ):
-                            logger.debug("[%s] Skipped — audio doesn't look like speech (RMS=%.4f)",
-                                         label, rms)
-                            buffer = np.array([], dtype=np.float32)
-                            consecutive_silent = 0
-                            last_preview_time = time.time()
-                            continue
+                    # Find the loudest part of the buffer to check if there's any speech
+                    # (the overall RMS might be low due to trailing silence)
+                    chunk_size = min(SAMPLE_RATE // 2, len(buffer) // 3)  # 0.5s or 1/3 of buffer
+                    max_rms = 0
+                    
+                    if chunk_size > 0 and len(buffer) >= chunk_size:
+                        for i in range(0, len(buffer) - chunk_size, max(chunk_size // 2, 1)):
+                            chunk_rms = compute_rms(buffer[i:i+chunk_size])
+                            max_rms = max(max_rms, chunk_rms)
+                    else:
+                        # Buffer too short for chunking, use overall RMS
+                        max_rms = compute_rms(buffer)
+                    
+                    # Use a MUCH lower threshold for final chunk (audio stopped)
+                    final_chunk_threshold = rms_threshold * 0.3
+                    
+                    logger.debug("[%s] Final buffer check: max_RMS=%.4f, threshold=%.4f, len=%.2fs",
+                                 label, max_rms, final_chunk_threshold, len(buffer) / SAMPLE_RATE)
+                    
+                    if max_rms > final_chunk_threshold:
+                        # For game audio WITHOUT bandpass, do a quick speech check
+                        # Use very relaxed threshold to catch all possible voice chat
+                        if is_game and not bandpass_on:
+                            # Check the loudest segment specifically
+                            if chunk_size > 0 and len(buffer) >= chunk_size:
+                                best_segment = None
+                                best_segment_rms = 0
+                                for i in range(0, len(buffer) - chunk_size, max(chunk_size // 2, 1)):
+                                    segment = buffer[i:i+chunk_size]
+                                    seg_rms = compute_rms(segment)
+                                    if seg_rms > best_segment_rms:
+                                        best_segment = segment
+                                        best_segment_rms = seg_rms
+                            else:
+                                best_segment = buffer
+                            
+                            # VERY relaxed speech check for final buffer
+                            if best_segment is not None and not is_likely_speech(
+                                best_segment, SAMPLE_RATE, final_chunk_threshold * 0.5,
+                                bandpass_applied=False,
+                            ):
+                                logger.debug("[%s] Final buffer skipped — not speech (max RMS=%.4f)",
+                                             label, max_rms)
+                                buffer = np.array([], dtype=np.float32)
+                                consecutive_silent = 0
+                                last_preview_time = time.time()
+                                if preview_shown:
+                                    preview_func("")
+                                    preview_shown = False
+                                continue
+                        
+                        # Process the final buffer
+                        logger.info("[%s] Processing final buffer (max RMS=%.4f, len=%.2fs)",
+                                     label, max_rms, len(buffer) / SAMPLE_RATE)
                         self._transcribe_and_translate(
-                            buffer, language, translator, update_func, label
+                            buffer, language, translator, update_func, preview_func, label
                         )
+                        preview_shown = False
+                        # Start cooldown so preview doesn't immediately overwrite the final text
+                        last_final_time = time.time()
+                    else:
+                        # Buffer is too quiet - clear any stuck preview
+                        logger.debug("[%s] Final buffer too quiet (max RMS=%.4f < %.4f)",
+                                     label, max_rms, final_chunk_threshold)
+                        if preview_shown:
+                            preview_func("")
+                            preview_shown = False
+                    
                     buffer = np.array([], dtype=np.float32)
                     consecutive_silent = 0
                     last_preview_time = time.time()
@@ -336,15 +396,19 @@ class TranslationApp:
 
             # ── Streaming preview ───────────────────────────────────
             # Only run one preview at a time to reduce CPU load
+            # Also respect cooldown after a final translation is displayed
+            now = time.time()
+            in_cooldown = (now - last_final_time) < FINAL_DISPLAY_COOLDOWN
             if (self.overlay.is_streaming_enabled()
                     and len(buffer) >= preview_min_samples
                     and consecutive_silent < silence_trigger
-                    and not preview_in_progress.is_set()):
-                now = time.time()
+                    and not preview_in_progress.is_set()
+                    and not in_cooldown):
                 interval_s = self.overlay.streaming_interval_ms() / 1000.0
                 if now - last_preview_time >= interval_s:
                     last_preview_time = now
                     preview_in_progress.set()
+                    preview_shown = True  # Mark that we're showing a preview
                     threading.Thread(
                         target=self._preview_transcribe,
                         args=(buffer.copy(), language, translator,
@@ -361,17 +425,27 @@ class TranslationApp:
 
             if should_process:
                 rms = compute_rms(buffer)
+                logger.debug("[%s] Buffer ready: RMS=%.4f, threshold=%.4f, len=%.2fs",
+                             label, rms, rms_threshold, len(buffer) / SAMPLE_RATE)
                 if rms > rms_threshold:
                     # For game audio WITHOUT bandpass, verify it looks like speech
-                    if is_game and not bandpass_on and not is_likely_speech(
-                        buffer, SAMPLE_RATE, rms_threshold,
-                        bandpass_applied=False,
-                    ):
-                        logger.debug("[%s] Skipped — not speech (RMS=%.4f)", label, rms)
-                        buffer = np.array([], dtype=np.float32)
-                        consecutive_silent = 0
-                        last_preview_time = time.time()
-                        continue
+                    # RELAXED: Only filter obvious non-speech (music/explosions)
+                    if is_game and not bandpass_on:
+                        # Use much lower RMS threshold for speech check
+                        speech_check_rms = rms_threshold * 0.5
+                        if not is_likely_speech(
+                            buffer, SAMPLE_RATE, speech_check_rms,
+                            bandpass_applied=False,
+                        ):
+                            logger.debug("[%s] Skipped — not speech (RMS=%.4f)", label, rms)
+                            buffer = np.array([], dtype=np.float32)
+                            consecutive_silent = 0
+                            last_preview_time = time.time()
+                            # Clear stuck preview
+                            if preview_shown:
+                                preview_func("")
+                                preview_shown = False
+                            continue
 
                     if len(buffer) >= max_samples:
                         split_at = self._find_silence_split(buffer, silence_threshold)
@@ -381,10 +455,22 @@ class TranslationApp:
                         process_buf = buffer
                         buffer = np.array([], dtype=np.float32)
 
+                    logger.debug("[%s] Processing buffer (%.2fs)...", label, len(process_buf) / SAMPLE_RATE)
                     self._transcribe_and_translate(
-                        process_buf, language, translator, update_func, label
+                        process_buf, language, translator, update_func, preview_func, label
                     )
+                    # Clear preview state after final processing
+                    preview_shown = False
+                    # Start cooldown so preview doesn't immediately overwrite the final text
+                    last_final_time = time.time()
+                    # Start cooldown so preview doesn't immediately overwrite the final text
+                    last_final_time = time.time()
                 else:
+                    # Buffer too quiet - clear any stuck preview
+                    logger.debug("[%s] Buffer too quiet (RMS=%.4f < %.4f)", label, rms, rms_threshold)
+                    if preview_shown:
+                        preview_func("")
+                        preview_shown = False
                     buffer = np.array([], dtype=np.float32)
                 consecutive_silent = 0
                 last_preview_time = time.time()
@@ -435,72 +521,94 @@ class TranslationApp:
             if done_event is not None:
                 done_event.clear()
 
-    def _transcribe_and_translate(self, audio, language, translator, update_func, label):
+    def _transcribe_and_translate(self, audio, language, translator, update_func, preview_func, label):
         """Transcribe an audio segment and translate the result."""
         try:
             t0 = time.time()
             clean_mode = self._settings.get("clean_audio_mode")
             threshold = 0.9 if clean_mode else 0.75
             
+            logger.info("[%s] Starting transcription (%.2fs audio)...", label, len(audio) / SAMPLE_RATE)
+            
             # For game audio with filtering ON, detect language and skip mismatches
+            # RELAXED: Use higher confidence threshold to avoid false rejections
             if self._is_game_source(label) and self._should_filter_language():
                 text, detected_lang, prob = self.transcriber.transcribe_with_lang(
                     audio, language=language
                 )
                 
-                if detected_lang != language and prob > threshold:
+                # Only skip if VERY confident it's the wrong language (>95%)
+                if detected_lang != language and prob > 0.95:
                     logger.debug("[%s] Skipped — detected '%s' (prob %.0f%%), expected '%s'",
                                  label, detected_lang, prob * 100, language)
                     return
                 elif detected_lang != language:
-                    # Low confidence mismatch — re-transcribe with forced language
-                    # since the detection is unreliable
-                    logger.debug("[%s] Low-confidence '%s' (%.0f%%) — forcing '%s' transcription",
+                    # Mismatch with lower confidence — force expected language
+                    logger.debug("[%s] Detected '%s' (%.0f%%) but forcing '%s' transcription",
                                  label, detected_lang, prob * 100, language)
                     text = self.transcriber.transcribe_text(audio, language=language)
+                logger.info("[%s] Transcribed: '%s' (detected: %s %.0f%%)",
+                            label, text[:50] if text else "(empty)", detected_lang, prob * 100)
             else:
                 text = self.transcriber.transcribe_text(audio, language=language)
+                logger.info("[%s] Transcribed: '%s'", label, text[:50] if text else "(empty)")
 
-            if not text or is_hallucination(text):
+            if not text:
+                logger.info("[%s] Skipped — empty transcription", label)
+                return
+            
+            if is_hallucination(text):
+                logger.info('[%s] Skipped — hallucination: "%s"', label, text)
                 return
 
+            # Fix commonly misrecognized proper names before translating
+            text = apply_name_corrections(text, language=language)
+
             t1 = time.time()
+            logger.info("[%s] Translating: '%s'...", label, text)
             translated = translator.translate(text)
             t2 = time.time()
             
-            if translated and translated.strip():
-                # Post-translation filter: catch garbage/repeated output
-                if is_hallucination(translated) or _is_repetitive_translation(translated):
-                    logger.debug('[%s] Blocked repetitive/garbage translation: "%s"', label, text)
-                    return
-                
-                # Apply Gaming Glossary / Context Fixes
-                raw_translation = translated
-                translated = apply_gaming_glossary(translated)
-                
-                # Log translation for glossary review (only if changed)
-                if raw_translation != translated:
-                    # Determine source and target languages based on translator
-                    src_lang = translator.source_lang
-                    tgt_lang = translator.target_lang
-                    log_translation(text, raw_translation, translated, src_lang, tgt_lang)
-                
-                # Transliterate Cyrillic → Latin for mic output
-                if (not self._is_game_source(label)
-                        and self._settings.get("transliterate_mic")
-                        and has_cyrillic(translated)):
-                    translated = transliterate_russian(translated)
+            if not translated or not translated.strip():
+                logger.info('[%s] Skipped — empty translation for: "%s"', label, text)
+                return
+            
+            # Post-translation filter: catch garbage/repeated output
+            if is_hallucination(translated):
+                logger.info('[%s] Blocked hallucination translation: "%s" -> "%s"', label, text, translated)
+                return
+            
+            if _is_repetitive_translation(translated):
+                logger.info('[%s] Blocked repetitive translation: "%s" -> "%s"', label, text, translated)
+                return
+            
+            # Apply Gaming Glossary / Context Fixes
+            raw_translation = translated
+            tgt_lang = translator.target_lang
+            translated = apply_gaming_glossary(translated, target_lang=tgt_lang)
+            
+            # Log all translations for review
+            src_lang = translator.source_lang
+            log_translation(text, raw_translation, translated, src_lang, tgt_lang)
+            
+            # Transliterate Cyrillic → Latin for mic output
+            if (not self._is_game_source(label)
+                    and self._settings.get("transliterate_mic")
+                    and has_cyrillic(translated)):
+                translated = transliterate_russian(translated)
 
-                latency_transcribe = (t1 - t0) * 1000
-                latency_translate = (t2 - t1) * 1000
-                total_latency = (t2 - t0) * 1000
+            latency_transcribe = (t1 - t0) * 1000
+            latency_translate = (t2 - t1) * 1000
+            total_latency = (t2 - t0) * 1000
                 
-                logger.info('[%s] "%s" -> "%s" [Tr: %.0fms | Tl: %.0fms | Total: %.0fms]',
-                            label, text, translated,
-                            latency_transcribe, latency_translate, total_latency)
-                update_func(translated)
+            logger.info('[%s] "%s" -> "%s" [Tr: %.0fms | Tl: %.0fms | Total: %.0fms]',
+                        label, text, translated,
+                        latency_transcribe, latency_translate, total_latency)
+            logger.info("[%s] Calling update_func with: %s", label, translated)
+            update_func(translated)
+            logger.info("[%s] Successfully updated overlay", label)
         except Exception as e:
-            logger.error("[%s] Processing error: %s", label, e)
+            logger.error("[%s] Processing error: %s", label, e, exc_info=True)
 
     def run(self):
         """Start all components and run the app."""
