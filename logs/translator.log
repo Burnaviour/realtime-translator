@@ -8629,3 +8629,18 @@
 2026-02-14 22:13:27 [DEBUG] App: [Game RU->EN] Buffer too quiet (RMS=0.0000 < 0.0024)
 2026-02-14 22:13:27 [DEBUG] App: [Game RU->EN] Buffer ready: RMS=0.0000, threshold=0.0024, len=0.83s
 2026-02-14 22:13:27 [DEBUG] App: [Game RU->EN] Buffer too quiet (RMS=0.0000 < 0.0024)
+2026-02-14 22:13:28 [DEBUG] App: [Game RU->EN] Buffer ready: RMS=0.0000, threshold=0.0024, len=0.83s
+2026-02-14 22:13:28 [DEBUG] App: [Game RU->EN] Buffer too quiet (RMS=0.0000 < 0.0024)
+2026-02-14 22:13:29 [DEBUG] App: [Game RU->EN] Buffer ready: RMS=0.0000, threshold=0.0024, len=0.83s
+2026-02-14 22:13:29 [DEBUG] App: [Game RU->EN] Buffer too quiet (RMS=0.0000 < 0.0024)
+2026-02-14 22:13:30 [DEBUG] Audio: Game audio capture: RMS=0.0000
+2026-02-14 22:13:30 [DEBUG] App: [Game RU->EN] Buffer ready: RMS=0.0000, threshold=0.0024, len=0.83s
+2026-02-14 22:13:30 [DEBUG] App: [Game RU->EN] Buffer too quiet (RMS=0.0000 < 0.0024)
+2026-02-14 22:13:31 [DEBUG] App: [Game RU->EN] Buffer ready: RMS=0.0000, threshold=0.0024, len=0.83s
+2026-02-14 22:13:31 [DEBUG] App: [Game RU->EN] Buffer too quiet (RMS=0.0000 < 0.0024)
+2026-02-14 22:13:32 [DEBUG] App: [Game RU->EN] Buffer ready: RMS=0.0000, threshold=0.0024, len=0.83s
+2026-02-14 22:13:32 [DEBUG] App: [Game RU->EN] Buffer too quiet (RMS=0.0000 < 0.0024)
+2026-02-14 22:13:32 [DEBUG] App: [Game RU->EN] Buffer ready: RMS=0.0000, threshold=0.0024, len=0.83s
+2026-02-14 22:13:32 [DEBUG] App: [Game RU->EN] Buffer too quiet (RMS=0.0000 < 0.0024)
+2026-02-14 22:13:33 [DEBUG] App: [Game RU->EN] Buffer ready: RMS=0.0000, threshold=0.0024, len=0.83s
+2026-02-14 22:13:33 [DEBUG] App: [Game RU->EN] Buffer too quiet (RMS=0.0000 < 0.0024)
