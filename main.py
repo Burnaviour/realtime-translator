@@ -272,6 +272,7 @@ class TranslationApp:
         max_samples = int(SAMPLE_RATE * 20)
 
         is_game = self._is_game_source(label)
+        is_mic = not is_game
         bandpass_on = is_game and self._settings.get("speech_filter_enabled")
 
         # Game audio uses a noise gate from settings.
@@ -307,6 +308,29 @@ class TranslationApp:
         FINAL_DISPLAY_COOLDOWN = 3.0  # seconds to keep final text visible
 
         while self.running:
+            # ── Early exit: skip all processing if this pipeline is disabled ──
+            # Mic pipeline: skip when show_mic_overlay is off (saves Whisper + translation GPU)
+            # Both pipelines: skip when overlay is hidden via F9 (saves CPU/GPU)
+            if is_mic and not self._settings.get("show_mic_overlay"):
+                # Drain the audio queue so it doesn't grow unbounded, but don't process
+                try:
+                    audio_source.audio_queue.get(timeout=0.5)
+                except queue.Empty:
+                    pass
+                buffer = np.array([], dtype=np.float32)
+                consecutive_silent = 0
+                continue
+
+            if not self.overlay.visible:
+                # Overlay hidden (F9) — drain audio but skip expensive processing
+                try:
+                    audio_source.audio_queue.get(timeout=0.5)
+                except queue.Empty:
+                    pass
+                buffer = np.array([], dtype=np.float32)
+                consecutive_silent = 0
+                continue
+
             try:
                 chunk = audio_source.audio_queue.get(timeout=0.3)
             except queue.Empty:

@@ -22,6 +22,22 @@ NAME_CORRECTIONS_RU = {
     r"\bМузыка\b(?!\s)": "Музаффар",  # Sometimes garbled as just "Музыка" (music)
     r"\bМузык\b": "Музаффар",        # Truncated garble of Музаффар
     r"\bМузафар\b": "Музаффар",      # Close but missing double ф
+
+    # "переводчик" (translator) — Whisper garbles to "приводчик" (driver)
+    r"\bприводчик\b": "переводчик",
+    r"\bприводчик привёл\b": "переводчик перевёл",
+    r"\bприводчик привел\b": "переводчик перевёл",
+
+    # Fortnite — Whisper doesn't know the game name
+    r"\bфортнайт\b": "Fortnite",
+    r"\bфорнайт\b": "Fortnite",
+    r"\bфортнайте\b": "Fortnite",
+
+    # Gaming callouts Whisper garbles
+    r"\bшутган[ыи]?\b": "дробовик",   # "shotgun" borrowed word -> proper Russian
+    r"\bшотган[ыи]?\b": "дробовик",
+    r"\bграун\b": "ground",            # English "ground" transliterated into Russian
+    r"\bвайт\b": "wait",              # English "wait" transliterated into Russian
 }
 
 # Corrections applied to ENGLISH transcriptions (before translation)
@@ -130,6 +146,17 @@ GAMER_GLOSSARY_EN = {
     r"\bthe\s+machine\b": "the AR",  # "автомат" -> the machine -> the AR
     r"\ba\s+machine\b": "an AR",     # "автомат" -> a machine -> an AR
     r"\bautomaton\b": "AR",
+    r"\bvending machine\b": "AR",    # opus-mt: "автомат" -> vending machine -> AR
+    r"\bmy vending machine\b": "my AR",
+    r"\bjokers?\b": "shotguns",      # opus-mt: "шутганы" -> jokers -> shotguns
+    r"\bAuto-machine machine\b": "Automatic AR",  # opus-mt: "автоматический автомат"
+    r"\bNope\b": "No",               # opus-mt: "Нет" -> Nope (too informal)
+    r"\bHere we go\b": "Let's go",   # opus-mt: "Поехали" -> Here we go
+    r"\bGood job\b": "Well done",    # opus-mt: "Молодцы" -> Good job (close but not exact)
+    r"\bchicken pows\b": "chicken pilaf",  # opus-mt: "плов" -> pows
+    r"\bFortnight\b": "Fortnite",    # opus-mt: close but wrong spelling
+    r"\bLet's pull it off\b": "Let's crank",  # opus-mt: "Откручиваем"
+    r"\byou're fucking shit\b": "you're crazy",  # opus-mt: escalates "чёртовщина"
 
     # Rarity names (Fortnite uses "Gold" not "golden")
     r"\bgolden\b": "Gold",           # "золотой" -> golden -> Gold
@@ -174,6 +201,38 @@ GAMER_GLOSSARY_EN = {
     r"\bopponents\b": "enemies",
     r"\bschoolchildren\b": "kids",        # "школьники" -> schoolchildren -> kids
 
+    # Угу -> Uh-huh/Yeah (not "Ugo" transliteration)
+    r"\bUgo\b": "Uh-huh",                                   # "Угу" -> Ugo -> Uh-huh
+
+    # Жесть -> Damn/Insane (not "A meal")
+    r"\bA meal\b": "Damn!",                                  # "Жесть" -> A meal -> Damn!
+
+    # Молодец -> Well done (not "Young man" / "Young people")
+    r"\bYoung man\b": "Well done",                           # "Молодец" -> Young man -> Well done
+    r"\bYoung people\b": "Well done!",                       # "Молодцы" -> Young people -> Well done!
+
+    # Разбил -> Cracked (shield), not "smashed"
+    r"\bHe smashed one\b": "He cracked one",                 # "Разбил одного" -> cracked shield
+    r"\bsmashed\b": "cracked",                               # gaming: break shield
+
+    # Ног/нокнул -> knocked/downed (not "foot"/"leg")
+    r"\bThe foot\b": "Knocked!",                              # "Ног" (short for нок) -> knocked
+    r"\bWhite leg\b": "White, knocked!",                      # "Белый ног" -> white HP, knocked
+    r"\bLeg,\s*I've been kicking his legs\b": "Knocked, I knocked him",
+
+    # заныкнулся -> hid (not "drowned")
+    r"\bI drowned under a tree\b": "I hid under a tree",     # "заныкнулся" = hid
+
+    # Жетпак -> Jetpack (not "badge")
+    r"\bA badge can be bought\b": "A jetpack can be bought",
+    r"\bbadge\b(?=.*(?:fly|buy|bought|launch))": "jetpack",  # context-aware
+
+    # золотарство -> gold loot (not "goldsmithing")
+    r"\bgoldsmithing\b": "gold looting",
+
+    # Fasting -> posted up ("пост" = position)
+    r"\bThey're fasting\b": "They're posted up",             # "с постом" = at the post
+
     # Hallucinations / Idioms / Common Mistranslations
     r"\bthe hair is white\b": "bad aim",             # "косой" -> hair is white -> bad aim
     r"\bdrifting down the road\b": "dropping",       # "скидываешься" -> drifting -> dropping
@@ -187,6 +246,86 @@ GAMER_GLOSSARY_EN = {
     r"\bSoca\b": "Bitch",                            # "Сука" -> Soca (transliteration error)
     r"\bthat's right!\b": "Fuuuck!",                  # "Ебааа!" -> that's right (wrong exclamation)
     r"\bOh, my God!\b(?=.*(?:wow|whoa))": "Whoa!",  # "Ухты!" context-aware
+
+    # ── Feb 14 log fixes ────────────────────────────────────────────
+    # Over-translation: translator adds "not at all" to simple negatives
+    r"\bOh, no, not at all\.\b": "Oh, no.",          # "О, нет" should just be "Oh, no."
+    r"\bNo, not at all\.\b": "No.",                   # "Нет" should just be "No."
+
+    # Over-translation: 3x "нет" becomes 4x "no"
+    r"\bNo, no, no, no\.\b": "No, no, no.",          # "Нет, нет, нет" = 3 nos, not 4
+
+    # Over-translation: simple exclamations padded
+    r"^Nice work\.?$": "Nice.",                       # "Найс" = just "Nice"
+    r"^Nice work!$": "Nice!",                         # "Найс!" = just "Nice!"
+
+    # Бочка -> Barrel (not "bottle")
+    r"\bA bottle\b": "A barrel",                      # "Бочка" = barrel
+    r"\bthe bottle\b": "the barrel",
+
+    # Сундук -> Chest (not "soundtrack")
+    r"\bThe soundtrack\b": "The chest",               # "Сундук" = chest/treasure chest
+    r"\bthe soundtrack\b": "the chest",
+
+    # кушать -> eat (not "cook")
+    r"\bI love to cook\b": "I love to eat",           # "Я люблю кушать" = eat
+
+    # плов -> pilaf (not "flower")
+    r"\bchicken flower\b": "chicken pilaf",           # "плов с курицей" = pilaf
+
+    # лук -> bow (Fortnite weapon, not "onion")
+    r"\bthere was onion\b": "there was a bow",        # Fortnite bow weapon
+    r"\bonions?\b(?=.*(?:pick|grab|take|loot|found|shoot|damage|bow))": "bows",
+
+    # Fortnite -> not "forty-nine"
+    r"\bforty-nine\b": "Fortnite",                    # "фортнайт" mistranslated
+    r"\bfortnight\b": "Fortnite",                     # alternate misspelling
+
+    # Рома/Роман -> proper name (not "Rome"/"novel")
+    r"^Rome\!?\s*$": "Roma!",                         # "Рома" = person's name
+    r"\bRome!\b": "Roma!",
+    r"\bRome,\s*Rome\b": "Roma, Roma",
+    r"\bRoma, no!\b": "Roma, no!",
+    r"^The novel\.?$": "Roman.",                      # "Роман" = person's name
+
+    # ground (not "crow") — gaming callout
+    r"\bCrow, crow\b": "Ground, ground",              # "граун" = ground
+
+    # wait (not "white") — gaming callout
+    r"\bWhite-white\b": "Wait-wait",                  # "вайт-вайт" = wait-wait
+    r"\bWhite, white, white\b": "Wait, wait, wait",
+
+    # Ferris wheel (not "sighting wheel")
+    r"\bsighting wheel\b": "Ferris wheel",            # "колесо обозрения" = Ferris wheel
+
+    # Шлюпки -> boats (not "shed")
+    r"\bIt's a shed\b": "Boats",                      # "Шлюпки" = boats/dinghies
+
+    # жопа -> ass/damn (not "my God")
+    # Note: hard to fix without context since "Oh, my God" is used elsewhere
+
+    # Откручиваем -> cranking (not "roll it up")
+    r"\bLet's roll it up\b": "Let's crank it",        # "Откручиваем" = unscrewing/cranking
+
+    # Автоматически автоматизированный -> automatic AR
+    r"\bAutomatically automated\b": "Automatic AR",   # "автоматический автомат"
+
+    # пылесос/пылесосить -> vacuum/loot everything (Fortnite slang)
+    r"\bYou're a dirtbag\b": "You're a vacuum",       # "Вы пылесос" = you loot everything
+    r"\bYou've ruined everything\b": "You've looted everything",
+    r"\bYou're pollinating onions\b": "You're vacuuming the bows",  # looting all bows
+
+    # He killed her -> She killed (feminine verb "убила")
+    r"\bHe killed her\b": "She killed him",            # "Убила" = she killed
+
+    # shoot yourself -> shoot back
+    r"\bwhy don't you shoot yourself\b": "why aren't you shooting back",
+
+    # motherfucker escalation fix
+    r"\bmotherfucker\b": "damn thing",                 # "чёртовщина" = devilry, not motherfucker
+
+    # shotgun (not "joke")
+    r"\bI need a joke\b": "I need shotguns",           # "шутганы" = shotguns
     
     # Knocked/Downed (CRITICAL GAMING FIX)
     r"\bnaked and naked\b": "knocked knocked",       # "нока-нака-накан" -> naked and naked -> knocked knocked
@@ -211,6 +350,79 @@ GAMER_GLOSSARY_RU = {
     # Noob (keep as-is, don't translate)
     r"\bнооб\b": "нуб",                      # noob -> нооб -> нуб
     r"\bноб\b": "нуб",                        # noob -> ноб -> нуб
+
+    # "He's low" / "they're low" => low HP, not short/small
+    r"\bон\s+низкий\b": "у него мало хп",                  # he's low HP
+    r"\bона\s+низкая\b": "у неё мало хп",                  # she's low HP
+    r"\bони\s+низкие\b": "у них мало хп",                  # they're low HP
+    r"\bодин\s+(?:из\s+них\s+)?низкий\b": "один ваншот",  # one is low
+    r"\bнет,\s+нет,\s+нет,\s+он\s+низкий\b": "нет, нет, нет, у него мало хп",
+
+    # Rush => раш (gaming loan word, not "hurry")
+    r"\bРасс,\s*расс,\s*расс\b": "раш, раш, раш",        # Rush transliteration fail
+    r"\bпоспешите,\s*поспешите,\s*поспешите\b": "раш, раш, раш",
+    r"\bпоспешите\b": "рашьте",                             # hurry -> rush
+    r"\bПоторопись,\s*поторопись\b": "раш, раш",
+    r"\bпоторопись\b": "рашь",
+    r"\bспешите\b": "рашите",                               # rush (imperative)
+    r"\bреш,\s*шеш,\s*шеш\b": "раш, раш, раш",           # garbled "rush"
+
+    # "gogogogo" => давай давай (not бабушка/grandma)
+    r"\bДавай,\s*бабушка\b": "Давай, давай, давай",         # gogo misheard as grandma
+    r"\bДа,\s*бабушка\b": "Да, давай, давай",               # "Yeah, gogogogo"
+    r"\bбабушка\b": "давай давай",                           # fallback
+
+    # Come here => Иди сюда (not "Приезжайте" = drive/travel here)
+    r"\bПриезжайте\s+сюда\b": "Идите сюда",
+    r"\bприезжайте\b": "идите",
+    r"\bПриезжай\s+сюда\b": "Иди сюда",
+    r"\bприезжай\b": "иди",
+
+    # Pump (shotgun) => помповик, not насос (water pump)
+    r"\bфиолетовых?\s+насосо?в?\b": "фиолетовый помповик",
+    r"\bнасос\s+портала\b": "помповик",
+    r"\bнасос\b": "помповик",                               # pump (shotgun)
+
+    # Mark => отметь (ping), not person name "Марк"
+    r"\bМарк,\s*Марк,\s*Марк\b": "отметь, отметь, отметь",
+    r"\bМарк,\s*Марк\b": "отметь, отметь",
+    r"(?i)\bГде\s+враг\?\s*Марк,\s*Марк,\s*Марк\b": "Где враг? Отметь, отметь, отметь",
+    r"(?i)\bГде\s+знак\s+Марк\s+Марк\b": "Где? Отметь, отметь",
+
+    # Push => пуш (gaming attack), not "толкнуть" (physical push)
+    r"\bНаталкивай,\s*наталкивай\b": "пуш, пуш",
+    r"\bтолкнуть\b": "пуш",
+    r"\bНатолкните\b": "Пуш",
+
+    # Reload => перезарядить (weapon), not перезагрузить (reboot computer)
+    r"\bперезагрузить,\s*перезагрузить,\s*перезагрузить\b": "перезарядись, перезарядись, перезарядись",
+    r"\bперезагрузить,\s*перезагрузить\b": "перезарядись, перезарядись",
+    r"\bперезагрузить\b": "перезарядить",
+    r"\bперезагружаются\b": "ребутятся",                    # rebooting (Fortnite respawn)
+    r"\bперезагрузили\b": "ребутнули",
+    r"\bперезагрузились\b": "респнулись",
+    r"\bна\s+перезагрузку\b": "на ребут",
+    r"\bперезагрузка,\s*перезагрузка\b": "ребут, ребут",
+    r"\bперезагрузка\b": "ребут",
+    r"\bперезагрузился\b": "ребутнулся",
+    r"\bбыли\s+перезагружены\b": "были ребутнуты",
+
+    # Launchpad => лаунчпад/трамплин (not "запускная панель")
+    r"\bЗапускная\s+панель\b": "Лаунчпад",
+    r"\bзапускная\s+панель\b": "лаунчпад",
+    r"\bзапускную\s+панель\b": "лаунчпад",
+
+    # Shotgun => дробовик/шотган (not "пистолет")
+    r"\bФиолетовый\s+пистолет\b": "Фиолетовый дробовик",
+    r"\bфиолетовый\s+пистолет\b": "фиолетовый дробовик",
+
+    # Knock (downed) => нокнут (not "стучит" = knocking on door)
+    r"\bОдин\s+стучит,\s*другой\s+стучит\b": "Один нокнут, другой нокнут",
+    r"\bстучит\b": "нокнут",                                # knock = downed
+
+    # Sniper ammo => снайперские патроны (not "оружие")
+    r"\bСнайперское\s+оружие,\s*снайперское\s+оружие\b": "Снайперские патроны, снайперские патроны",
+    r"\bснайперское\s+оружие\b": "снайперские патроны",
 
     # Skin (don't translate as "кожа")
     r"\bновая\s+кожа\b": "новый скин",       # new skin -> новая кожа -> новый скин

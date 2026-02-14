@@ -190,7 +190,8 @@ class SettingsWindow:
         section(t("sec_translation"))
         self._vars.append(dropdown_row(t("lbl_trans_model"), "translation_model",
                                        ["opus-mt", "opus-mt-big", "nllb-600M", "nllb-1.3B",
-                                        "nllb-600M-ct2", "nllb-1.3B-ct2"]))
+                                        "nllb-3.3B", "nllb-600M-ct2", "nllb-1.3B-ct2",
+                                        "madlad400-3b"]))
         tk.Label(frame, text=t("lbl_trans_model_hint"),
                  font=("Segoe UI", 8), fg="#7b8794", bg=BG, anchor="w").grid(
             row=row, column=0, columnspan=3, sticky="w", padx=16, pady=(0, 4))
@@ -203,7 +204,8 @@ class SettingsWindow:
         section(t("sec_overlay_size"))
         self._vars.append(slider_row(t("lbl_width"), "overlay_width", 400, 1600))
         self._vars.append(slider_row(t("lbl_height"), "overlay_height", 80, 400))
-        self._vars.append(slider_row(t("lbl_opacity"), "overlay_opacity", 0.3, 1.0, 0.02, is_float=True))
+        self._vars.append(slider_row(t("lbl_bg_opacity"), "bg_opacity", 0.0, 1.0, 0.05, is_float=True))
+        self._vars.append(slider_row(t("lbl_text_opacity"), "text_opacity", 0.3, 1.0, 0.05, is_float=True))
 
         section(t("sec_colors"))
         self._vars.append(color_row(t("lbl_bg_color"), "bg_color"))
@@ -219,6 +221,11 @@ class SettingsWindow:
         section(t("sec_streaming"))
         self._vars.append(checkbox_row(t("lbl_streaming_enable"), "streaming_enabled"))
         self._vars.append(slider_row(t("lbl_streaming_interval"), "streaming_interval_ms", 500, 3000, 100))
+
+        section(t("sec_chat_log"))
+        self._vars.append(slider_row(t("lbl_chat_log_lines"), "chat_log_lines", 2, 10))
+        self._vars.append(checkbox_row(t("lbl_chat_fade"), "chat_fade_enabled"))
+        self._vars.append(slider_row(t("lbl_chat_fade_sec"), "chat_line_duration_sec", 5, 30))
 
         # ── Buttons ─────────────────────────────────────────────────
         btn_frame = tk.Frame(frame, bg=BG)

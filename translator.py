@@ -1,9 +1,11 @@
+import re
 import torch
 import ctranslate2
 from huggingface_hub import snapshot_download
 from transformers import (
     MarianMTModel, MarianTokenizer,
     AutoModelForSeq2SeqLM, AutoTokenizer,
+    T5ForConditionalGeneration, T5Tokenizer,
 )
 from logger_config import get_logger
 
@@ -47,6 +49,14 @@ MODEL_INFO = {
         "label": "NLLB 1.3B (Quantized Fast)",
         "label_ru": "NLLB 1.3B (Квантованная, Быстрая)",
     },
+    "nllb-3.3B": {
+        "label": "NLLB 3.3B (superior quality, 7GB VRAM)",
+        "label_ru": "NLLB 3.3B (отличное качество, 7ГБ VRAM)",
+    },
+    "madlad400-3b": {
+        "label": "MADLAD-400 3B (Google, 400+ langs)",
+        "label_ru": "MADLAD-400 3B (Google, 400+ языков)",
+    },
 }
 
 
@@ -76,6 +86,8 @@ class Translator:
 
         if translation_model.endswith("-ct2"):
             self._load_ct2(translation_model)
+        elif translation_model == "madlad400-3b":
+            self._load_madlad()
         elif translation_model.startswith("nllb"):
             self._load_nllb(translation_model)
         elif translation_model == "opus-mt-big":
@@ -143,7 +155,9 @@ class Translator:
             self._load_marian()
 
     def _load_nllb(self, variant):
-        if variant == "nllb-1.3B":
+        if variant == "nllb-3.3B":
+            model_name = "facebook/nllb-200-3.3B"
+        elif variant == "nllb-1.3B":
             model_name = "facebook/nllb-200-distilled-1.3B"
         else:
             model_name = "facebook/nllb-200-distilled-600M"
@@ -166,6 +180,23 @@ class Translator:
             self.backend = "opus-mt"
             self._load_marian()
 
+    def _load_madlad(self):
+        """Load Google MADLAD-400-3B-MT (T5-based, 400+ languages)."""
+        model_name = "google/madlad400-3b-mt"
+        logger.info("Loading %s on %s...", model_name, self.device)
+        try:
+            self.tokenizer = T5Tokenizer.from_pretrained(model_name)
+            self.model = T5ForConditionalGeneration.from_pretrained(
+                model_name, torch_dtype=torch.float16 if self.device == "cuda" else torch.float32
+            ).to(self.device)
+            self.model.eval()
+            logger.info("%s loaded.", model_name)
+        except Exception as e:
+            logger.error("ERROR loading %s: %s", model_name, e)
+            logger.warning("Falling back to nllb-600M...")
+            self.backend = "nllb-600M"
+            self._load_nllb("nllb-600M")
+
     # ── Translation ─────────────────────────────────────────────────
 
     def translate(self, text):
@@ -178,7 +209,46 @@ class Translator:
         if not self.model or not text or not text.strip():
             return ""
 
+        # opus-mt drops sentences when given multi-sentence input.
+        # Split into individual sentences and translate each.
+        if self.backend in ("opus-mt", "opus-mt-big"):
+            sentences = self._split_sentences(text)
+            if len(sentences) > 1:
+                parts = [self._translate_single(s) for s in sentences if s.strip()]
+                return " ".join(p for p in parts if p)
+            # Single sentence — fall through to normal path
+
+        return self._translate_single(text)
+
+    @staticmethod
+    def _split_sentences(text):
+        """Split text on sentence-ending punctuation while keeping the delimiter."""
+        # Split on .!? followed by space or end-of-string
+        parts = re.split(r'(?<=[.!?])\s+', text.strip())
+        return [p for p in parts if p.strip()]
+
+    def _translate_single(self, text):
+        """Translate a single chunk of text."""
+        if not text or not text.strip():
+            return ""
+
         try:
+            # 0. MADLAD-400 — uses T5 with language prefix tag
+            if self.backend == "madlad400-3b":
+                # MADLAD uses "<2xx>" prefix to specify target language
+                _madlad_lang_map = {"en": "en", "ru": "ru"}
+                tgt = _madlad_lang_map.get(self.target_lang, self.target_lang)
+                prefixed = f"<2{tgt}> {text}"
+                batch = self.tokenizer(
+                    prefixed, return_tensors="pt", padding=True,
+                    truncation=True, max_length=512,
+                ).to(self.device)
+                with torch.inference_mode():
+                    generated = self.model.generate(
+                        **batch, max_new_tokens=256,
+                    )
+                return self.tokenizer.decode(generated[0], skip_special_tokens=True)
+
             # 1. CTranslate2 Inference
             if self.backend.endswith("-ct2"):
                 # Tokenize source
@@ -203,7 +273,7 @@ class Translator:
                 gen_kwargs["forced_bos_token_id"] = self._forced_bos_id
 
             with torch.inference_mode():
-                generated = self.model.generate(**batch, **gen_kwargs)
+                generated = self.model.generate(**batch, max_new_tokens=256, **gen_kwargs)
 
             result = self.tokenizer.batch_decode(
                 generated, skip_special_tokens=True

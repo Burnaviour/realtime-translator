@@ -17,7 +17,9 @@ DEFAULTS = {
     "overlay_height": 140,
     "overlay_x": -1,        # -1 = auto-center
     "overlay_y": -1,        # -1 = auto (just above taskbar)
-    "overlay_opacity": 0.88,
+    "overlay_opacity": 0.88,      # legacy (ignored when bg/text opacity set)
+    "bg_opacity": 0.45,             # background panel transparency (0=invisible, 1=solid)
+    "text_opacity": 0.95,           # text / content transparency
 
     # Colors (hex)
     "bg_color": "#0d1117",
@@ -35,11 +37,16 @@ DEFAULTS = {
     "streaming_enabled": True,
     "streaming_interval_ms": 1200,   # How often to show preview text
 
+    # Chat log (scrolling history for game translations)
+    "chat_log_lines": 5,             # How many recent game translations to show (2-10)
+    "chat_fade_enabled": True,       # Older messages gradually dim
+    "chat_line_duration_sec": 12,    # Seconds before a line fully fades out (0 = never fade)
+
     # Whisper model
     "whisper_model": "medium",       # tiny, base, small, medium, large-v2, large-v3
 
     # Translation model
-    "translation_model": "nllb-600M", # opus-mt, opus-mt-big, nllb-600M, nllb-1.3B
+    "translation_model": "opus-mt", # opus-mt, nllb-600M, nllb-1.3B, nllb-600M-ct2, nllb-1.3B-ct2
 
     # Language
     "app_language": "english",       # "english" or "russian" — UI text language

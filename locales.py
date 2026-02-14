@@ -189,6 +189,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Opacity",
         "ru": "Прозрачность",
     },
+    "lbl_bg_opacity": {
+        "en": "Background opacity",
+        "ru": "Прозрачность фона",
+    },
+    "lbl_text_opacity": {
+        "en": "Text opacity",
+        "ru": "Прозрачность текста",
+    },
     "lbl_bg_color": {
         "en": "Background",
         "ru": "Фон",
@@ -224,6 +232,22 @@ _STRINGS: dict[str, dict[str, str]] = {
     "lbl_streaming_interval": {
         "en": "Preview interval (ms)",
         "ru": "Интервал предпросмотра (мс)",
+    },
+    "sec_chat_log": {
+        "en": "Chat Log (Multi-Speaker)",
+        "ru": "Лог Чата (Несколько Игроков)",
+    },
+    "lbl_chat_log_lines": {
+        "en": "Visible chat lines",
+        "ru": "Видимых строк чата",
+    },
+    "lbl_chat_fade": {
+        "en": "Fade out old lines",
+        "ru": "Затухание старых строк",
+    },
+    "lbl_chat_fade_sec": {
+        "en": "Line duration (sec)",
+        "ru": "Длительность строки (сек)",
     },
     "btn_apply": {
         "en": "Apply",
