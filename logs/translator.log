@@ -8570,3 +8570,17 @@
 2026-02-14 22:13:04 [DEBUG] httpcore.http11: receive_response_body.complete
 2026-02-14 22:13:04 [DEBUG] httpcore.http11: response_closed.started
 2026-02-14 22:13:04 [DEBUG] httpcore.http11: response_closed.complete
+2026-02-14 22:13:05 [DEBUG] App: [Game RU->EN] Buffer ready: RMS=0.0000, threshold=0.0024, len=0.83s
+2026-02-14 22:13:05 [DEBUG] App: [Game RU->EN] Buffer too quiet (RMS=0.0000 < 0.0024)
+2026-02-14 22:13:06 [DEBUG] App: [Game RU->EN] Buffer ready: RMS=0.0000, threshold=0.0024, len=0.83s
+2026-02-14 22:13:06 [DEBUG] App: [Game RU->EN] Buffer too quiet (RMS=0.0000 < 0.0024)
+2026-02-14 22:13:07 [DEBUG] App: [Game RU->EN] Buffer ready: RMS=0.0000, threshold=0.0024, len=0.83s
+2026-02-14 22:13:07 [DEBUG] App: [Game RU->EN] Buffer too quiet (RMS=0.0000 < 0.0024)
+2026-02-14 22:13:07 [DEBUG] App: [Game RU->EN] Buffer ready: RMS=0.0000, threshold=0.0024, len=0.83s
+2026-02-14 22:13:07 [DEBUG] App: [Game RU->EN] Buffer too quiet (RMS=0.0000 < 0.0024)
+2026-02-14 22:13:08 [DEBUG] App: [Game RU->EN] Buffer ready: RMS=0.0000, threshold=0.0024, len=0.83s
+2026-02-14 22:13:08 [DEBUG] App: [Game RU->EN] Buffer too quiet (RMS=0.0000 < 0.0024)
+2026-02-14 22:13:09 [DEBUG] App: [Game RU->EN] Buffer ready: RMS=0.0000, threshold=0.0024, len=0.83s
+2026-02-14 22:13:09 [DEBUG] App: [Game RU->EN] Buffer too quiet (RMS=0.0000 < 0.0024)
+2026-02-14 22:13:10 [DEBUG] App: [Game RU->EN] Buffer ready: RMS=0.0000, threshold=0.0024, len=0.83s
+2026-02-14 22:13:10 [DEBUG] App: [Game RU->EN] Buffer too quiet (RMS=0.0000 < 0.0024)
